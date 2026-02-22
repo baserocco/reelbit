@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-
-const SYMBOLS = ["🍒", "💎", "⭐", "🔔", "🍀", "7️⃣"];
-const REEL_COUNT = 3;
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { Environment, Float, Html, RoundedBox } from "@react-three/drei";
+import * as THREE from "three";
 
 /* ─── Audio helpers ──────────────────────────────────────────── */
 const createAudioContext = () => {
@@ -12,224 +12,396 @@ const createAudioContext = () => {
   }
 };
 
-const playTone = (ctx: AudioContext, freq: number, duration: number, type: OscillatorType = "sine", gain = 0.15) => {
+const playTone = (ctx: AudioContext, freq: number, duration: number, type: OscillatorType = "sine", gain = 0.12) => {
   const osc = ctx.createOscillator();
-  const gainNode = ctx.createGain();
-  osc.connect(gainNode);
-  gainNode.connect(ctx.destination);
+  const g = ctx.createGain();
+  osc.connect(g);
+  g.connect(ctx.destination);
   osc.type = type;
   osc.frequency.setValueAtTime(freq, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(freq * 0.5, ctx.currentTime + duration);
-  gainNode.gain.setValueAtTime(gain, ctx.currentTime);
-  gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+  g.gain.setValueAtTime(gain, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
   osc.start(ctx.currentTime);
   osc.stop(ctx.currentTime + duration);
 };
 
 const playSpinSound = (ctx: AudioContext) => {
-  [200, 250, 300, 350, 400].forEach((freq, i) => {
-    setTimeout(() => playTone(ctx, freq, 0.12, "sawtooth", 0.08), i * 60);
-  });
+  [200, 300, 400, 500].forEach((f, i) => setTimeout(() => playTone(ctx, f, 0.1, "sawtooth", 0.06), i * 50));
 };
 
 const playWinSound = (ctx: AudioContext) => {
-  [523, 659, 784, 1047].forEach((freq, i) => {
-    setTimeout(() => playTone(ctx, freq, 0.25, "sine", 0.18), i * 120);
-  });
+  [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => playTone(ctx, f, 0.25, "sine", 0.15), i * 100));
 };
 
 const playJackpotSound = (ctx: AudioContext) => {
-  const freqs = [523, 659, 784, 1047, 1319, 1568];
-  freqs.forEach((freq, i) => {
-    setTimeout(() => playTone(ctx, freq, 0.35, "sine", 0.22), i * 90);
-    setTimeout(() => playTone(ctx, freq * 1.5, 0.3, "triangle", 0.1), i * 90 + 45);
+  [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => {
+    setTimeout(() => playTone(ctx, f, 0.35, "sine", 0.2), i * 80);
+    setTimeout(() => playTone(ctx, f * 1.5, 0.25, "triangle", 0.08), i * 80 + 40);
   });
 };
 
-/* ─── Particle explosion ─────────────────────────────────────── */
-interface Particle {
-  id: number;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  color: string;
-  size: number;
-  life: number;
-  maxLife: number;
-  shape: "circle" | "star" | "coin";
-}
+/* ─── Symbol data ────────────────────────────────────────────── */
+const SYMBOLS = ["🍒", "💎", "⭐", "🔔", "🍀", "7️⃣"];
+const SYMBOL_COLORS: Record<string, string> = {
+  "🍒": "#FF3366",
+  "💎": "#00F5FF",
+  "⭐": "#FFD700",
+  "🔔": "#FFB347",
+  "🍀": "#00FF88",
+  "7️⃣": "#FF00AA",
+};
 
-const JACKPOT_COLORS = ["#FFD700", "#FF00AA", "#00F5FF", "#FF6B00", "#FFFFFF"];
-const WIN_COLORS = ["#00F5FF", "#FFFFFF", "#7DF9FF"];
-
-const ParticleExplosion = ({
-  active,
-  isJackpot,
-  containerRef,
-}: {
-  active: boolean;
+/* ─── 3D Reel Symbol ─────────────────────────────────────────── */
+const ReelSymbol = ({ symbol, position, isCenter, isWin, isJackpot }: {
+  symbol: string;
+  position: [number, number, number];
+  isCenter: boolean;
+  isWin: boolean;
   isJackpot: boolean;
-  containerRef: React.RefObject<HTMLDivElement>;
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const particlesRef = useRef<Particle[]>([]);
-  const animFrameRef = useRef<number>();
-  const activeRef = useRef(active);
+  const meshRef = useRef<THREE.Mesh>(null);
+  const glowColor = SYMBOL_COLORS[symbol] || "#FFFFFF";
+  const glowIntensity = isJackpot ? 2 : isWin ? 1.2 : 0;
 
-  useEffect(() => {
-    activeRef.current = active;
-  }, [active]);
-
-  const spawnParticles = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-    const count = isJackpot ? 120 : 50;
-    const colors = isJackpot ? JACKPOT_COLORS : WIN_COLORS;
-
-    const newParticles: Particle[] = Array.from({ length: count }, (_, i) => {
-      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
-      const speed = isJackpot ? 3 + Math.random() * 8 : 2 + Math.random() * 5;
-      return {
-        id: Date.now() + i,
-        x: cx + (Math.random() - 0.5) * 60,
-        y: cy + (Math.random() - 0.5) * 40,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - (isJackpot ? 2 : 1),
-        color: colors[Math.floor(Math.random() * colors.length)],
-        size: isJackpot ? 4 + Math.random() * 8 : 3 + Math.random() * 5,
-        life: 1,
-        maxLife: 0.6 + Math.random() * 0.8,
-        shape: isJackpot
-          ? (["circle", "star", "coin"] as const)[Math.floor(Math.random() * 3)]
-          : "circle",
-      };
-    });
-
-    particlesRef.current = [...particlesRef.current, ...newParticles];
-  }, [isJackpot]);
-
-  useEffect(() => {
-    if (active) spawnParticles();
-  }, [active, spawnParticles]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const resize = () => {
-      const parent = canvas.parentElement;
-      if (parent) {
-        canvas.width = parent.clientWidth;
-        canvas.height = parent.clientHeight;
-      }
-    };
-    resize();
-
-    const drawStar = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number) => {
-      ctx.beginPath();
-      for (let i = 0; i < 5; i++) {
-        const a = (Math.PI * 2 * i) / 5 - Math.PI / 2;
-        const b = a + Math.PI / 5;
-        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
-        ctx.lineTo(x + Math.cos(b) * (r * 0.4), y + Math.sin(b) * (r * 0.4));
-      }
-      ctx.closePath();
-    };
-
-    const loop = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      particlesRef.current = particlesRef.current.filter((p) => p.life > 0.01);
-
-      particlesRef.current.forEach((p) => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vy += 0.18; // gravity
-        p.vx *= 0.99;
-        p.life -= 0.016 / p.maxLife;
-
-        ctx.globalAlpha = Math.max(0, p.life);
-        ctx.fillStyle = p.color;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = p.color;
-
-        if (p.shape === "star") {
-          drawStar(ctx, p.x, p.y, p.size);
-          ctx.fill();
-        } else if (p.shape === "coin") {
-          ctx.beginPath();
-          ctx.ellipse(p.x, p.y, p.size, p.size * 0.5, Date.now() * 0.005 + p.id, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = "#FFFFFF44";
-          ctx.lineWidth = 0.5;
-          ctx.stroke();
-        } else {
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size * 0.5, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.shadowBlur = 0;
-        ctx.globalAlpha = 1;
-      });
-
-      animFrameRef.current = requestAnimationFrame(loop);
-    };
-
-    loop();
-    return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
-  }, []);
+  useFrame((_, delta) => {
+    if (!meshRef.current) return;
+    if (isJackpot && isCenter) {
+      meshRef.current.rotation.y += delta * 2;
+    }
+  });
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 pointer-events-none z-20"
-      style={{ borderRadius: "inherit" }}
-    />
+    <group position={position}>
+      {/* Symbol background tile */}
+      <RoundedBox
+        ref={meshRef}
+        args={[1.6, 1.3, 0.3]}
+        radius={0.12}
+        smoothness={4}
+      >
+        <meshStandardMaterial
+          color={isCenter ? (isJackpot ? "#1a0a00" : "#0a0a15") : "#060610"}
+          metalness={0.8}
+          roughness={0.3}
+          emissive={isCenter && (isWin || isJackpot) ? glowColor : "#000000"}
+          emissiveIntensity={glowIntensity * 0.15}
+        />
+      </RoundedBox>
+
+      {/* Symbol text */}
+      <Html
+        center
+        position={[0, 0, 0.2]}
+        style={{
+          fontSize: isCenter ? "36px" : "28px",
+          opacity: isCenter ? 1 : 0.5,
+          filter: isCenter && (isWin || isJackpot) ? `drop-shadow(0 0 12px ${glowColor})` : "none",
+          transition: "all 0.3s",
+          pointerEvents: "none",
+          userSelect: "none",
+        }}
+      >
+        {symbol}
+      </Html>
+
+      {/* Glow ring for center winning symbols */}
+      {isCenter && isJackpot && (
+        <mesh position={[0, 0, -0.05]}>
+          <ringGeometry args={[0.7, 0.85, 32]} />
+          <meshBasicMaterial color={glowColor} transparent opacity={0.4} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+    </group>
   );
 };
 
-/* ─── Coin rain ──────────────────────────────────────────────── */
-const CoinRain = ({ active }: { active: boolean }) => {
-  const coins = useRef(
-    Array.from({ length: 30 }, (_, i) => ({
-      id: i,
-      left: `${Math.random() * 100}%`,
-      delay: `${Math.random() * 1.5}s`,
-      duration: `${1.2 + Math.random() * 1.5}s`,
-      size: 16 + Math.floor(Math.random() * 16),
-    }))
-  );
+/* ─── Spinning Reel Column ───────────────────────────────────── */
+const SpinningReel = ({ symbols, spinning, reelIndex, onSpinComplete }: {
+  symbols: string[];
+  spinning: boolean;
+  reelIndex: number;
+  onSpinComplete: () => void;
+}) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const spinPhase = useRef<"idle" | "spinning" | "stopping">("idle");
+  const spinSpeed = useRef(0);
+  const offsetY = useRef(0);
+  const targetSymbols = useRef(symbols);
+  const stopDelay = useRef(0);
 
-  if (!active) return null;
+  useEffect(() => {
+    if (spinning) {
+      spinPhase.current = "spinning";
+      spinSpeed.current = 15 + reelIndex * 2;
+      stopDelay.current = 800 + reelIndex * 400;
+      setTimeout(() => {
+        spinPhase.current = "stopping";
+        targetSymbols.current = symbols;
+      }, stopDelay.current);
+    }
+  }, [spinning, symbols, reelIndex]);
+
+  useFrame((_, delta) => {
+    if (!groupRef.current) return;
+
+    if (spinPhase.current === "spinning") {
+      offsetY.current += spinSpeed.current * delta;
+      // Create blur effect via position oscillation
+      groupRef.current.position.y = Math.sin(offsetY.current * 2) * 0.05;
+    } else if (spinPhase.current === "stopping") {
+      spinSpeed.current *= 0.88;
+      offsetY.current += spinSpeed.current * delta;
+      groupRef.current.position.y *= 0.9;
+
+      if (spinSpeed.current < 0.3) {
+        spinPhase.current = "idle";
+        spinSpeed.current = 0;
+        offsetY.current = 0;
+        groupRef.current.position.y = 0;
+        onSpinComplete();
+      }
+    }
+  });
+
+  const displaySymbols = spinPhase.current !== "idle"
+    ? [
+        SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+        SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+        SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+      ]
+    : symbols;
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
-      {coins.current.map((coin) => (
-        <div
-          key={coin.id}
-          className="absolute top-0 select-none"
-          style={{
-            left: coin.left,
-            fontSize: coin.size,
-            animationName: "coinDrop",
-            animationDuration: coin.duration,
-            animationDelay: coin.delay,
-            animationTimingFunction: "linear",
-            animationIterationCount: "3",
-            animationFillMode: "forwards",
-          }}
-        >
-          🪙
-        </div>
+    <group ref={groupRef}>
+      {displaySymbols.map((sym, i) => (
+        <ReelSymbol
+          key={`${reelIndex}-${i}`}
+          symbol={spinPhase.current === "idle" ? symbols[i] : sym}
+          position={[0, (1 - i) * 1.5, 0]}
+          isCenter={i === 1}
+          isWin={false}
+          isJackpot={false}
+        />
       ))}
-    </div>
+    </group>
+  );
+};
+
+/* ─── Slot Machine Frame ─────────────────────────────────────── */
+const SlotFrame = ({ win }: { win: "jackpot" | "small" | null }) => {
+  const neonRef = useRef<THREE.PointLight>(null);
+  const neonRef2 = useRef<THREE.PointLight>(null);
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    if (neonRef.current) {
+      neonRef.current.intensity = win === "jackpot"
+        ? 3 + Math.sin(t * 8) * 2
+        : 1 + Math.sin(t * 2) * 0.3;
+    }
+    if (neonRef2.current) {
+      neonRef2.current.intensity = win === "jackpot"
+        ? 2 + Math.cos(t * 6) * 1.5
+        : 0.8 + Math.cos(t * 2.5) * 0.2;
+    }
+  });
+
+  return (
+    <group>
+      {/* Main frame */}
+      <RoundedBox args={[6.2, 5.8, 0.6]} radius={0.2} smoothness={4} position={[0, 0, -0.3]}>
+        <meshStandardMaterial
+          color="#0a0a12"
+          metalness={0.95}
+          roughness={0.15}
+          envMapIntensity={0.5}
+        />
+      </RoundedBox>
+
+      {/* Inner bezel */}
+      <RoundedBox args={[5.6, 5, 0.15]} radius={0.15} smoothness={4} position={[0, 0, 0.05]}>
+        <meshStandardMaterial
+          color="#050510"
+          metalness={0.9}
+          roughness={0.2}
+        />
+      </RoundedBox>
+
+      {/* Top accent bar */}
+      <mesh position={[0, 2.7, 0.1]}>
+        <boxGeometry args={[5.4, 0.08, 0.1]} />
+        <meshStandardMaterial
+          color={win === "jackpot" ? "#FFD700" : "#00F5FF"}
+          emissive={win === "jackpot" ? "#FFD700" : "#00F5FF"}
+          emissiveIntensity={win === "jackpot" ? 3 : 1}
+        />
+      </mesh>
+
+      {/* Bottom accent bar */}
+      <mesh position={[0, -2.7, 0.1]}>
+        <boxGeometry args={[5.4, 0.08, 0.1]} />
+        <meshStandardMaterial
+          color="#FF00AA"
+          emissive="#FF00AA"
+          emissiveIntensity={win === "jackpot" ? 2 : 0.6}
+        />
+      </mesh>
+
+      {/* Side neon strips */}
+      {[-2.85, 2.85].map((x, i) => (
+        <mesh key={i} position={[x, 0, 0.1]}>
+          <boxGeometry args={[0.06, 5, 0.1]} />
+          <meshStandardMaterial
+            color="#00F5FF"
+            emissive="#00F5FF"
+            emissiveIntensity={win === "jackpot" ? 2 : 0.5}
+          />
+        </mesh>
+      ))}
+
+      {/* Win line indicator */}
+      <mesh position={[0, 0, 0.2]}>
+        <boxGeometry args={[5.8, 0.03, 0.02]} />
+        <meshStandardMaterial
+          color="#FFD700"
+          emissive="#FFD700"
+          emissiveIntensity={win ? 3 : 0.3}
+          transparent
+          opacity={win ? 1 : 0.4}
+        />
+      </mesh>
+
+      {/* Corner orbs */}
+      {[
+        [-2.7, 2.5, 0.2],
+        [2.7, 2.5, 0.2],
+        [-2.7, -2.5, 0.2],
+        [2.7, -2.5, 0.2],
+      ].map((pos, i) => (
+        <mesh key={i} position={pos as [number, number, number]}>
+          <sphereGeometry args={[0.12, 16, 16]} />
+          <meshStandardMaterial
+            color={win === "jackpot" ? "#FFD700" : "#00F5FF"}
+            emissive={win === "jackpot" ? "#FFD700" : "#00F5FF"}
+            emissiveIntensity={win === "jackpot" ? 4 : 1}
+          />
+        </mesh>
+      ))}
+
+      {/* Neon lights */}
+      <pointLight ref={neonRef} position={[0, 3, 2]} color="#00F5FF" intensity={1} distance={8} />
+      <pointLight ref={neonRef2} position={[0, -3, 2]} color="#FF00AA" intensity={0.8} distance={8} />
+      {win === "jackpot" && (
+        <>
+          <pointLight position={[-2, 0, 3]} color="#FFD700" intensity={4} distance={10} />
+          <pointLight position={[2, 0, 3]} color="#FFD700" intensity={4} distance={10} />
+        </>
+      )}
+    </group>
+  );
+};
+
+/* ─── 3D Particle Explosion ──────────────────────────────────── */
+const Particle = ({ position, velocity, color, size }: {
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  color: string;
+  size: number;
+}) => {
+  const ref = useRef<THREE.Mesh>(null);
+  const life = useRef(1);
+
+  useFrame((_, delta) => {
+    if (!ref.current) return;
+    life.current -= delta * 0.8;
+    if (life.current <= 0) {
+      ref.current.visible = false;
+      return;
+    }
+    velocity.y -= 3 * delta; // gravity
+    position.add(velocity.clone().multiplyScalar(delta));
+    ref.current.position.copy(position);
+    ref.current.scale.setScalar(life.current * size);
+    (ref.current.material as THREE.MeshBasicMaterial).opacity = life.current;
+  });
+
+  return (
+    <mesh ref={ref} position={position}>
+      <sphereGeometry args={[0.1, 8, 8]} />
+      <meshBasicMaterial color={color} transparent opacity={1} />
+    </mesh>
+  );
+};
+
+const ParticleExplosion3D = ({ active, isJackpot }: { active: boolean; isJackpot: boolean }) => {
+  const particles = useMemo(() => {
+    if (!active) return [];
+    const count = isJackpot ? 80 : 30;
+    const colors = isJackpot
+      ? ["#FFD700", "#FF00AA", "#00F5FF", "#FF6B00", "#FFFFFF"]
+      : ["#00F5FF", "#FFFFFF", "#7DF9FF"];
+    return Array.from({ length: count }, (_, i) => {
+      const angle = (Math.PI * 2 * i) / count;
+      const speed = isJackpot ? 4 + Math.random() * 6 : 2 + Math.random() * 4;
+      return {
+        id: i,
+        position: new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0.5),
+        velocity: new THREE.Vector3(
+          Math.cos(angle) * speed,
+          Math.sin(angle) * speed + 2,
+          (Math.random() - 0.5) * 3
+        ),
+        color: colors[Math.floor(Math.random() * colors.length)],
+        size: isJackpot ? 0.5 + Math.random() * 1 : 0.3 + Math.random() * 0.5,
+      };
+    });
+  }, [active, isJackpot]);
+
+  return (
+    <group>
+      {particles.map((p) => (
+        <Particle key={p.id} {...p} />
+      ))}
+    </group>
+  );
+};
+
+/* ─── Scene ──────────────────────────────────────────────────── */
+const SlotScene = ({ reels, spinning, win, showExplosion, onReelStop }: {
+  reels: string[][];
+  spinning: boolean;
+  win: "jackpot" | "small" | null;
+  showExplosion: boolean;
+  onReelStop: (index: number) => void;
+}) => {
+  return (
+    <>
+      <ambientLight intensity={0.15} />
+      <directionalLight position={[5, 5, 5]} intensity={0.3} color="#8888FF" />
+
+      <Float speed={1} rotationIntensity={0.02} floatIntensity={0.05}>
+        <group>
+          <SlotFrame win={win} />
+
+          {/* Reels */}
+          {reels.map((reel, i) => (
+            <group key={i} position={[(i - 1) * 1.85, 0, 0.15]}>
+              <SpinningReel
+                symbols={reel}
+                spinning={spinning}
+                reelIndex={i}
+                onSpinComplete={() => onReelStop(i)}
+              />
+            </group>
+          ))}
+        </group>
+      </Float>
+
+      {/* Particles */}
+      <ParticleExplosion3D active={showExplosion} isJackpot={win === "jackpot"} />
+
+      <Environment preset="night" />
+    </>
   );
 };
 
@@ -255,7 +427,6 @@ const BondingCurveChart = ({ userCount }: { userCount: number }) => {
           </span>
         </div>
       </div>
-
       <div className="relative h-32 mb-4">
         <svg viewBox="0 0 100 100" className="w-full h-full" preserveAspectRatio="none">
           {[25, 50, 75].map((y) => (
@@ -274,26 +445,16 @@ const BondingCurveChart = ({ userCount }: { userCount: number }) => {
           <g clipPath="url(#progressClip)">
             <polyline points={points} fill="url(#curveGrad)" stroke="#00F5FF" strokeWidth="1.5" />
           </g>
-          <circle
-            cx={progress}
-            cy={100 - Math.pow(progress / 100, 0.6) * 100}
-            r="2"
-            fill="#00F5FF"
-            style={{ filter: "drop-shadow(0 0 4px #00F5FF)" }}
-          />
+          <circle cx={progress} cy={100 - Math.pow(progress / 100, 0.6) * 100} r="2" fill="#00F5FF" style={{ filter: "drop-shadow(0 0 4px #00F5FF)" }} />
         </svg>
       </div>
-
       <div className="space-y-2">
         <div className="flex justify-between text-xs font-inter text-white/40">
           <span>Market cap progress</span>
           <span className="text-neon-cyan">{progress.toFixed(0)}%</span>
         </div>
         <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-neon-cyan to-neon-magenta transition-all duration-1000"
-            style={{ width: `${progress}%` }}
-          />
+          <div className="h-full rounded-full bg-gradient-to-r from-neon-cyan to-neon-magenta transition-all duration-1000" style={{ width: `${progress}%` }} />
         </div>
         <div className="flex justify-between text-xs font-inter text-white/30">
           <span>0 SOL</span>
@@ -304,7 +465,43 @@ const BondingCurveChart = ({ userCount }: { userCount: number }) => {
   );
 };
 
-/* ─── Main section ───────────────────────────────────────────── */
+/* ─── Coin rain ──────────────────────────────────────────────── */
+const CoinRain = ({ active }: { active: boolean }) => {
+  const coins = useRef(
+    Array.from({ length: 40 }, (_, i) => ({
+      id: i,
+      left: `${Math.random() * 100}%`,
+      delay: `${Math.random() * 1.5}s`,
+      duration: `${1.2 + Math.random() * 1.5}s`,
+      size: 16 + Math.floor(Math.random() * 20),
+    }))
+  );
+  if (!active) return null;
+  return (
+    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+      {coins.current.map((coin) => (
+        <div
+          key={coin.id}
+          className="absolute top-0 select-none"
+          style={{
+            left: coin.left,
+            fontSize: coin.size,
+            animationName: "coinDrop",
+            animationDuration: coin.duration,
+            animationDelay: coin.delay,
+            animationTimingFunction: "linear",
+            animationIterationCount: "3",
+            animationFillMode: "forwards",
+          }}
+        >
+          🪙
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/* ─── Main Section ───────────────────────────────────────────── */
 const SlotDemoSection = () => {
   const [reels, setReels] = useState<string[][]>([
     ["🍒", "💎", "⭐"],
@@ -320,91 +517,64 @@ const SlotDemoSection = () => {
   const [soundOn, setSoundOn] = useState(false);
   const [showExplosion, setShowExplosion] = useState(false);
   const [showCoinRain, setShowCoinRain] = useState(false);
-  const [reelBorderColor, setReelBorderColor] = useState("rgba(0,245,255,0.2)");
-  const [screenFlash, setScreenFlash] = useState<string | null>(null);
+  const [reelsStoppedCount, setReelsStoppedCount] = useState(0);
 
   const autoSpinRef = useRef<NodeJS.Timeout>();
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const slotRef = useRef<HTMLDivElement>(null);
 
   const getAudio = () => {
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = createAudioContext();
-    }
+    if (!audioCtxRef.current) audioCtxRef.current = createAudioContext();
     return audioCtxRef.current;
   };
-
-  const triggerJackpot = useCallback((betVal: number) => {
-    setWin("jackpot");
-    setCredits((c) => c + betVal * 50);
-    setShowExplosion(true);
-    setShowCoinRain(true);
-    setReelBorderColor("#FFD700");
-    setScreenFlash("rgba(255,215,0,0.15)");
-
-    if (soundOn) {
-      const ctx = getAudio();
-      if (ctx) playJackpotSound(ctx);
-    }
-
-    setTimeout(() => setShowExplosion(false), 3000);
-    setTimeout(() => setShowCoinRain(false), 6000);
-    setTimeout(() => setReelBorderColor("rgba(0,245,255,0.2)"), 4000);
-    setTimeout(() => setScreenFlash(null), 800);
-  }, [soundOn]);
-
-  const triggerSmallWin = useCallback((betVal: number) => {
-    setWin("small");
-    setCredits((c) => c + betVal * 3);
-    setShowExplosion(true);
-    setReelBorderColor("#00F5FF");
-    setScreenFlash("rgba(0,245,255,0.08)");
-
-    if (soundOn) {
-      const ctx = getAudio();
-      if (ctx) playWinSound(ctx);
-    }
-
-    setTimeout(() => setShowExplosion(false), 1500);
-    setTimeout(() => setReelBorderColor("rgba(0,245,255,0.2)"), 2000);
-    setTimeout(() => setScreenFlash(null), 400);
-  }, [soundOn]);
 
   const doSpin = useCallback(() => {
     if (spinning) return;
     setSpinning(true);
     setWin(null);
     setShowExplosion(false);
+    setShowCoinRain(false);
+    setReelsStoppedCount(0);
 
     const betVal = parseFloat(bet) || 1;
     setCredits((c) => Math.max(0, c - betVal));
-    setReelBorderColor("rgba(0,245,255,0.4)");
 
     if (soundOn) {
       const ctx = getAudio();
       if (ctx) playSpinSound(ctx);
     }
 
+    // Generate final symbols
+    const newReels = Array.from({ length: 3 }, () =>
+      Array.from({ length: 3 }, () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)])
+    );
+
+    // Stop reels sequentially
     setTimeout(() => {
-      const newReels = Array.from({ length: REEL_COUNT }, () =>
-        Array.from({ length: 3 }, () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)])
-      );
       setReels(newReels);
       setSpinning(false);
-      setReelBorderColor("rgba(0,245,255,0.2)");
 
       const centerRow = newReels.map((r) => r[1]);
       if (centerRow.every((s) => s === centerRow[0])) {
-        triggerJackpot(betVal);
+        setWin("jackpot");
+        setCredits((c) => c + betVal * 50);
+        setShowExplosion(true);
+        setShowCoinRain(true);
+        if (soundOn) { const ctx = getAudio(); if (ctx) playJackpotSound(ctx); }
+        setTimeout(() => setShowExplosion(false), 3000);
+        setTimeout(() => setShowCoinRain(false), 5000);
       } else if (new Set(centerRow).size === 2) {
-        triggerSmallWin(betVal);
+        setWin("small");
+        setCredits((c) => c + betVal * 3);
+        setShowExplosion(true);
+        if (soundOn) { const ctx = getAudio(); if (ctx) playWinSound(ctx); }
+        setTimeout(() => setShowExplosion(false), 1500);
       }
-    }, 1500);
-  }, [spinning, bet, soundOn, triggerJackpot, triggerSmallWin]);
+    }, 1800);
+  }, [spinning, bet, soundOn]);
 
   useEffect(() => {
     if (autoSpin) {
-      autoSpinRef.current = setInterval(doSpin, 2800);
+      autoSpinRef.current = setInterval(doSpin, 3000);
     } else {
       clearInterval(autoSpinRef.current);
     }
@@ -424,45 +594,33 @@ const SlotDemoSection = () => {
     ? (parseFloat(bet) * 3).toFixed(2)
     : "0.00";
 
+  const handleReelStop = useCallback((index: number) => {
+    setReelsStoppedCount((c) => c + 1);
+  }, []);
+
   return (
     <>
-      {/* Global CSS for coin drop */}
       <style>{`
         @keyframes coinDrop {
           0%   { transform: translateY(-60px) rotate(0deg); opacity: 1; }
           80%  { opacity: 1; }
           100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
         }
-        @keyframes jackpot-pulse {
-          0%, 100% { text-shadow: 0 0 20px #FFD700, 0 0 40px #FFD700; }
-          50%       { text-shadow: 0 0 40px #FFD700, 0 0 80px #FF8C00, 0 0 120px #FFD700; }
+        @keyframes jackpot-glow {
+          0%, 100% { box-shadow: 0 0 30px rgba(255,215,0,0.3), 0 0 60px rgba(255,215,0,0.15); }
+          50% { box-shadow: 0 0 60px rgba(255,215,0,0.6), 0 0 120px rgba(255,215,0,0.3); }
         }
-        @keyframes win-pulse {
-          0%, 100% { text-shadow: 0 0 15px #00F5FF; }
-          50%       { text-shadow: 0 0 30px #00F5FF, 0 0 60px #00F5FF; }
-        }
-        .jackpot-text { animation: jackpot-pulse 0.6s ease-in-out infinite; }
-        .win-text     { animation: win-pulse 0.8s ease-in-out infinite; }
       `}</style>
 
-      {/* Full-screen flash */}
-      {screenFlash && (
-        <div
-          className="fixed inset-0 z-40 pointer-events-none transition-opacity duration-300"
-          style={{ backgroundColor: screenFlash }}
-        />
-      )}
-
-      {/* Coin rain overlay */}
       <CoinRain active={showCoinRain} />
 
       <section id="demo" className="relative py-24 lg:py-32 px-4 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black/95 via-black to-black/95" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-neon-magenta/4 blur-[120px] pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-neon-magenta/5 blur-[150px] pointer-events-none" />
 
         <div className="relative max-w-6xl mx-auto">
           {/* Header */}
-          <div className="text-center mb-16">
+          <div className="text-center mb-12">
             <span className="inline-block text-neon-magenta font-orbitron text-xs tracking-widest uppercase font-semibold mb-4">
               Live Demo
             </span>
@@ -475,188 +633,115 @@ const SlotDemoSection = () => {
           </div>
 
           <div className="grid lg:grid-cols-2 gap-8 items-start">
-            {/* ── Slot Machine ── */}
-            <div className="glass-card p-8 relative" ref={slotRef}>
-              {/* Machine header + sound toggle */}
-              <div className="flex items-start justify-between mb-6">
-                <div className="flex-1 text-center">
-                  <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-neon-gold/10 border border-neon-gold/30 mb-3">
-                    <span className="neon-text-gold text-xs font-orbitron font-semibold tracking-wider">
-                      🎰 COSMIC FORTUNE
-                    </span>
-                  </div>
-
-                  {/* Win announcement */}
-                  <div className="h-9 flex items-center justify-center">
-                    {win === "jackpot" && (
-                      <div className="font-orbitron font-black text-2xl jackpot-text text-neon-gold animate-bounce">
-                        ★ JACKPOT! ★
-                      </div>
-                    )}
-                    {win === "small" && (
-                      <div className="font-orbitron font-black text-xl win-text text-neon-cyan">
-                        🎊 Winner!
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Sound toggle */}
-                <button
-                  onClick={() => setSoundOn((s) => !s)}
-                  title={soundOn ? "Mute sounds" : "Enable sounds"}
-                  className={`ml-4 mt-1 flex-shrink-0 w-9 h-9 rounded-lg border flex items-center justify-center text-lg transition-all duration-200 ${
-                    soundOn
-                      ? "bg-neon-cyan/10 border-neon-cyan/40 text-neon-cyan"
-                      : "bg-white/5 border-white/10 text-white/30 hover:border-white/30 hover:text-white/60"
-                  }`}
+            {/* ── 3D Slot Machine ── */}
+            <div
+              className="glass-card overflow-hidden relative"
+              style={{
+                animation: win === "jackpot" ? "jackpot-glow 0.6s ease-in-out infinite" : "none",
+              }}
+            >
+              {/* 3D Canvas */}
+              <div className="w-full aspect-[4/3] relative">
+                <Canvas
+                  camera={{ position: [0, 0, 7], fov: 45 }}
+                  gl={{ antialias: true, alpha: true }}
+                  style={{ background: "transparent" }}
                 >
-                  {soundOn ? "🔊" : "🔇"}
-                </button>
-              </div>
+                  <SlotScene
+                    reels={reels}
+                    spinning={spinning}
+                    win={win}
+                    showExplosion={showExplosion}
+                    onReelStop={handleReelStop}
+                  />
+                </Canvas>
 
-              {/* Reels container with particle canvas */}
-              <div
-                className="relative mb-6 rounded-xl overflow-hidden transition-all duration-500"
-                style={{
-                  background: "linear-gradient(180deg, #0A0010 0%, #050010 100%)",
-                  border: `2px solid ${reelBorderColor}`,
-                  boxShadow: `0 0 30px ${reelBorderColor.replace("0.2", "0.15")}, inset 0 0 30px rgba(0,0,0,0.5)`,
-                }}
-              >
-                {/* Particle explosion canvas */}
-                <ParticleExplosion
-                  active={showExplosion}
-                  isJackpot={win === "jackpot"}
-                  containerRef={slotRef}
-                />
-
-                {/* Win line */}
-                <div
-                  className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-px z-10 transition-all duration-300"
-                  style={{
-                    background: win === "jackpot"
-                      ? "linear-gradient(90deg, transparent, #FFD700, transparent)"
-                      : "linear-gradient(90deg, transparent, rgba(255,215,0,0.5), transparent)",
-                    boxShadow: win === "jackpot" ? "0 0 12px #FFD700" : "none",
-                  }}
-                />
-
-                {/* Jackpot flash overlay */}
+                {/* Win overlay */}
                 {win === "jackpot" && (
-                  <div
-                    className="absolute inset-0 z-10 pointer-events-none rounded-xl"
-                    style={{
-                      background: "radial-gradient(circle at center, rgba(255,215,0,0.12) 0%, transparent 70%)",
-                      animation: "jackpot-pulse 0.6s ease-in-out infinite",
-                    }}
-                  />
-                )}
-
-                <div className="grid grid-cols-3 gap-0 p-4">
-                  {reels.map((reel, ri) => (
-                    <div key={ri} className="flex flex-col gap-2">
-                      {reel.map((symbol, si) => (
-                        <div
-                          key={si}
-                          className={`flex items-center justify-center h-16 rounded-lg text-3xl transition-all duration-300 ${
-                            spinning ? "animate-pulse opacity-60" : ""
-                          } ${si === 1 ? "scale-110" : "opacity-70"} ${
-                            si === 1 && win === "jackpot" ? "scale-125" : ""
-                          }`}
-                          style={{
-                            background:
-                              si === 1
-                                ? win === "jackpot"
-                                  ? "rgba(255,215,0,0.1)"
-                                  : "rgba(255,255,255,0.06)"
-                                : "rgba(255,255,255,0.02)",
-                            border:
-                              si === 1
-                                ? win === "jackpot"
-                                  ? "1px solid rgba(255,215,0,0.3)"
-                                  : "1px solid rgba(255,255,255,0.1)"
-                                : "none",
-                          }}
-                        >
-                          {spinning ? (
-                            <span className="text-white/30 text-2xl animate-spin-slow">◈</span>
-                          ) : (
-                            <span
-                              style={
-                                si === 1 && win === "jackpot"
-                                  ? { filter: "drop-shadow(0 0 8px #FFD700)" }
-                                  : si === 1 && win === "small"
-                                  ? { filter: "drop-shadow(0 0 6px #00F5FF)" }
-                                  : {}
-                              }
-                            >
-                              {symbol}
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                    <div className="font-orbitron font-black text-4xl sm:text-5xl animate-bounce"
+                      style={{ color: "#FFD700", textShadow: "0 0 30px #FFD700, 0 0 60px #FF8C00, 0 0 90px #FFD700" }}>
+                      ★ JACKPOT! ★
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+                {win === "small" && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                    <div className="font-orbitron font-black text-3xl"
+                      style={{ color: "#00F5FF", textShadow: "0 0 20px #00F5FF, 0 0 40px #00F5FF" }}>
+                      🎊 Winner!
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Credits / Bet / Win */}
-              <div className="flex justify-between items-center mb-4 px-1">
-                <div>
-                  <div className="text-white/30 text-xs font-inter uppercase tracking-wider">Credits</div>
-                  <div className="text-neon-cyan font-orbitron font-bold text-xl">{credits.toFixed(2)}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-white/30 text-xs font-inter uppercase tracking-wider">Bet</div>
-                  <input
-                    type="number"
-                    value={bet}
-                    onChange={(e) => setBet(e.target.value)}
-                    className="w-24 text-center bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-white font-orbitron text-lg focus:outline-none focus:border-neon-cyan/50"
-                    step="0.5"
-                    min="0.5"
-                  />
-                </div>
-                <div>
-                  <div className="text-white/30 text-xs font-inter uppercase tracking-wider">Win</div>
-                  <div
-                    className={`font-orbitron font-bold text-xl transition-all duration-300 ${
-                      win === "jackpot" ? "text-neon-gold jackpot-text" : "text-neon-gold"
+              {/* Controls panel */}
+              <div className="p-6 border-t border-white/5">
+                {/* Sound toggle */}
+                <div className="flex justify-end mb-3">
+                  <button
+                    onClick={() => setSoundOn((s) => !s)}
+                    title={soundOn ? "Mute" : "Enable sounds"}
+                    className={`w-8 h-8 rounded-lg border flex items-center justify-center text-sm transition-all ${
+                      soundOn
+                        ? "bg-neon-cyan/10 border-neon-cyan/40 text-neon-cyan"
+                        : "bg-white/5 border-white/10 text-white/30 hover:border-white/30"
                     }`}
                   >
-                    {winAmount}
+                    {soundOn ? "🔊" : "🔇"}
+                  </button>
+                </div>
+
+                {/* Credits / Bet / Win */}
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <div className="text-white/30 text-xs font-inter uppercase tracking-wider">Credits</div>
+                    <div className="text-neon-cyan font-orbitron font-bold text-xl">{credits.toFixed(2)}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-white/30 text-xs font-inter uppercase tracking-wider">Bet</div>
+                    <input
+                      type="number"
+                      value={bet}
+                      onChange={(e) => setBet(e.target.value)}
+                      className="w-24 text-center bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-white font-orbitron text-lg focus:outline-none focus:border-neon-cyan/50"
+                      step="0.5"
+                      min="0.5"
+                    />
+                  </div>
+                  <div className="text-right">
+                    <div className="text-white/30 text-xs font-inter uppercase tracking-wider">Win</div>
+                    <div className={`font-orbitron font-bold text-xl ${win === "jackpot" ? "text-neon-gold" : "text-neon-gold"}`}>
+                      {winAmount}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Controls */}
-              <div className="flex gap-3">
-                <button
-                  onClick={doSpin}
-                  disabled={spinning}
-                  className={`btn-primary flex-1 py-3 rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 ${
-                    win === "jackpot" ? "animate-pulse-slow" : ""
-                  }`}
-                >
-                  {spinning ? "⟳ Spinning..." : "🎰 SPIN"}
-                </button>
-                <button
-                  onClick={() => setAutoSpin(!autoSpin)}
-                  className={`px-4 py-3 rounded-xl text-sm font-orbitron font-semibold border transition-all duration-200 ${
-                    autoSpin
-                      ? "bg-neon-magenta/20 border-neon-magenta/50 text-neon-magenta"
-                      : "btn-outline"
-                  }`}
-                >
-                  AUTO
-                </button>
-              </div>
+                {/* Buttons */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={doSpin}
+                    disabled={spinning}
+                    className="btn-primary flex-1 py-3 rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {spinning ? "⟳ Spinning..." : "🎰 SPIN"}
+                  </button>
+                  <button
+                    onClick={() => setAutoSpin(!autoSpin)}
+                    className={`px-4 py-3 rounded-xl text-sm font-orbitron font-semibold border transition-all ${
+                      autoSpin
+                        ? "bg-neon-magenta/20 border-neon-magenta/50 text-neon-magenta"
+                        : "btn-outline"
+                    }`}
+                  >
+                    AUTO
+                  </button>
+                </div>
 
-              {/* Win tip */}
-              <p className="text-center text-white/20 text-xs font-inter mt-3">
-                💡 Tip: Match 3 in the center row to win. Triple 7️⃣ = JACKPOT
-              </p>
+                <p className="text-center text-white/20 text-xs font-inter mt-3">
+                  💡 Match 3 in the center row to win. Triple match = JACKPOT
+                </p>
+              </div>
             </div>
 
             {/* ── Right panel ── */}
@@ -675,10 +760,7 @@ const SlotDemoSection = () => {
                     { addr: "3pQ8...bH4e", action: "bought 20 shares", time: "12s ago" },
                     { addr: "7jL5...cW9k", action: "spun 0.8 SOL", time: "18s ago" },
                   ].map((item, i) => (
-                    <div
-                      key={i}
-                      className="flex justify-between items-center text-xs font-inter py-1.5 border-b border-white/5 last:border-0"
-                    >
+                    <div key={i} className="flex justify-between items-center text-xs font-inter py-1.5 border-b border-white/5 last:border-0">
                       <div>
                         <span className="text-neon-cyan/70 font-mono">{item.addr}</span>
                         <span className="text-white/40 ml-2">{item.action}</span>
@@ -689,10 +771,7 @@ const SlotDemoSection = () => {
                 </div>
               </div>
 
-              <div
-                className="glass-card p-6"
-                style={{ border: "1px solid rgba(255,215,0,0.2)", boxShadow: "0 0 20px rgba(255,215,0,0.05)" }}
-              >
+              <div className="glass-card p-6" style={{ border: "1px solid rgba(255,215,0,0.2)", boxShadow: "0 0 20px rgba(255,215,0,0.05)" }}>
                 <div className="text-white/50 text-xs font-inter uppercase tracking-wider mb-3">
                   Creator earnings (this slot)
                 </div>

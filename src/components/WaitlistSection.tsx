@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 const BENEFITS = [
   "Early access to AI slot builder — months before public launch",
@@ -13,6 +14,7 @@ const WaitlistSection = () => {
   const [email, setEmail] = useState("");
   const [wallet, setWallet] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [message, setMessage] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,20 +23,29 @@ const WaitlistSection = () => {
     setStatus("loading");
 
     try {
-      const response = await fetch("https://formspree.io/f/xeellgzg", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, wallet }),
+      const { data, error } = await supabase.functions.invoke("waitlist-signup", {
+        body: { email, wallet },
       });
 
-      if (response.ok) {
-        setStatus("success");
-        setEmail("");
-        setWallet("");
-      } else {
-        setStatus("error");
+      if (error) throw error;
+
+      if (data?.error) {
+        if (data.error.includes("already on the waitlist")) {
+          setMessage("You're already confirmed! 🎉");
+          setStatus("success");
+        } else {
+          setMessage(data.error);
+          setStatus("error");
+        }
+        return;
       }
+
+      setMessage(data?.message || "Check your email to confirm your spot!");
+      setStatus("success");
+      setEmail("");
+      setWallet("");
     } catch {
+      setMessage("Something went wrong — try again.");
       setStatus("error");
     }
   };
@@ -74,18 +85,8 @@ const WaitlistSection = () => {
               {BENEFITS.map((benefit, i) => (
                 <li key={i} className="flex items-start gap-3 group">
                   <div className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-neon-cyan/10 border border-neon-cyan/30 flex items-center justify-center transition-all duration-300 group-hover:bg-neon-cyan/20 group-hover:border-neon-cyan/60">
-                    <svg
-                      className="w-2.5 h-2.5 text-neon-cyan"
-                      viewBox="0 0 10 8"
-                      fill="none"
-                    >
-                      <path
-                        d="M1 4L3.5 6.5L9 1"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
+                    <svg className="w-2.5 h-2.5 text-neon-cyan" viewBox="0 0 10 8" fill="none">
+                      <path d="M1 4L3.5 6.5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </div>
                   <span className="text-white/70 font-inter text-sm leading-relaxed group-hover:text-white/90 transition-colors duration-200">
@@ -131,18 +132,24 @@ const WaitlistSection = () => {
             >
               {status === "success" ? (
                 <div className="text-center py-8">
-                  <div className="text-5xl mb-4">🎉</div>
+                  <div className="text-5xl mb-4">📬</div>
                   <h3 className="font-orbitron font-bold text-2xl text-neon-cyan mb-3">
-                    You're In!
+                    Check Your Email!
                   </h3>
                   <p className="text-white/60 font-inter">
-                    Check your email for updates. You'll be among the first to launch your slot on ReelBit.
+                    {message}
                   </p>
                   <div className="mt-6 p-3 rounded-lg bg-neon-cyan/5 border border-neon-cyan/20">
                     <p className="text-neon-cyan text-sm font-inter">
-                      🔥 You're creator #{(5000 + Math.floor(Math.random() * 200)).toLocaleString()} on the list!
+                      📩 Click the confirmation link in your email to secure your spot
                     </p>
                   </div>
+                  <button
+                    onClick={() => { setStatus("idle"); setMessage(""); }}
+                    className="mt-4 text-white/40 text-sm font-inter hover:text-white/70 transition-colors"
+                  >
+                    Use a different email →
+                  </button>
                 </div>
               ) : (
                 <>
@@ -151,7 +158,7 @@ const WaitlistSection = () => {
                       Reserve Your Spot
                     </h3>
                     <p className="text-white/50 font-inter text-sm">
-                      Free to join. No credit card required.
+                      Free to join. We'll send a confirmation email.
                     </p>
                   </div>
 
@@ -186,7 +193,7 @@ const WaitlistSection = () => {
 
                     {status === "error" && (
                       <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-inter">
-                        Something went wrong — try again.
+                        {message || "Something went wrong — try again."}
                       </div>
                     )}
 
@@ -203,7 +210,7 @@ const WaitlistSection = () => {
                   <div className="mt-6 pt-6 border-t border-white/5 grid grid-cols-3 gap-4 text-center">
                     {[
                       { icon: "🔒", label: "No spam" },
-                      { icon: "⚡", label: "Early access" },
+                      { icon: "📬", label: "Email confirm" },
                       { icon: "💎", label: "Bonus perks" },
                     ].map((item) => (
                       <div key={item.label}>
