@@ -36,7 +36,7 @@ const Navbar = () => {
             </div>
             <span className="font-orbitron font-bold text-xl tracking-wide">
               <span className="text-white">Reel</span>
-              <span className="neon-text-cyan">Bit</span>
+              <span className="text-red-500">Bit</span>
             </span>
           </div>
 
