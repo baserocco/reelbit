@@ -434,10 +434,14 @@ const SlotDemoSection = () => {
                 borderBottom: "1px solid rgba(255,150,0,0.06)",
               }}>
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-full" style={{
-                    background: "radial-gradient(circle, #FF6600, #CC1100)",
-                    boxShadow: "0 0 8px rgba(255,80,0,0.5)",
-                  }} />
+                  <div className="w-7 h-7 rounded overflow-hidden flex-shrink-0" style={{
+                    filter: "drop-shadow(0 0 6px rgba(255,80,0,0.6))",
+                  }}>
+                    <img src="/images/dragons-sheet.png" alt="Dragon's Inferno" className="h-full w-auto max-w-none" style={{
+                      /* Show only the left (fire dragon) half */
+                      transform: "scale(1.15)",
+                    }} />
+                  </div>
                   <span className="font-orbitron font-bold text-sm tracking-wider" style={{ color: "#FFD700" }}>DRAGON'S INFERNO</span>
                 </div>
                 <div className="flex items-center gap-3">
