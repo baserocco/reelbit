@@ -2,10 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import SlotCanvas from "./slot/SlotCanvas";
 import { SYMBOLS } from "./slot/SlotEngine";
 
-/* ─── Bet presets ──────────────────────────────────────────────── */
 const BET_OPTIONS = [1, 5, 10, 25];
 
-/* ─── Win Counter Animation ──────────────────────────────────── */
 const AnimatedCounter = ({ value, big }: { value: number; big: boolean }) => {
   const [display, setDisplay] = useState(0);
   const targetRef = useRef(0);
@@ -15,7 +13,7 @@ const AnimatedCounter = ({ value, big }: { value: number; big: boolean }) => {
     targetRef.current = value;
     const start = display;
     const diff = value - start;
-    const steps = big ? 40 : 20;
+    const steps = big ? 50 : 25;
     let step = 0;
     const iv = setInterval(() => {
       step++;
@@ -23,7 +21,7 @@ const AnimatedCounter = ({ value, big }: { value: number; big: boolean }) => {
       const eased = 1 - Math.pow(1 - progress, 3);
       setDisplay(start + diff * eased);
       if (step >= steps) { setDisplay(value); clearInterval(iv); }
-    }, 30);
+    }, 25);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
@@ -34,10 +32,10 @@ const AnimatedCounter = ({ value, big }: { value: number; big: boolean }) => {
         big ? "text-3xl sm:text-4xl scale-110 animate-bounce" : "text-xl sm:text-2xl"
       }`}
       style={{
-        color: big ? "#FFD700" : "#00F5FF",
+        color: big ? "#FFD700" : "#FF6600",
         textShadow: big
-          ? "0 0 30px #FFD700, 0 0 60px #FF8C00"
-          : "0 0 15px rgba(0,245,255,0.6)",
+          ? "0 0 30px #FFD700, 0 0 60px #FF6600, 0 0 90px #FF2200"
+          : "0 0 15px rgba(255,100,0,0.6)",
       }}
     >
       {display.toFixed(2)}
@@ -45,8 +43,7 @@ const AnimatedCounter = ({ value, big }: { value: number; big: boolean }) => {
   );
 };
 
-/* ─── Paw Rain (Jackpot celebration) ─────────────────────────── */
-const PawRain = ({ active }: { active: boolean }) => {
+const FireRain = ({ active }: { active: boolean }) => {
   const items = useRef(
     Array.from({ length: 40 }, (_, i) => ({
       id: i,
@@ -54,7 +51,7 @@ const PawRain = ({ active }: { active: boolean }) => {
       delay: `${Math.random() * 1.5}s`,
       duration: `${1.2 + Math.random() * 1.5}s`,
       size: 16 + Math.floor(Math.random() * 20),
-      emoji: ["🪙", "✨", "💎", "⭐"][Math.floor(Math.random() * 4)],
+      emoji: ["🔥", "💰", "🐉", "⚔️", "💎"][Math.floor(Math.random() * 5)],
     }))
   );
   if (!active) return null;
@@ -63,7 +60,7 @@ const PawRain = ({ active }: { active: boolean }) => {
       {items.current.map((c) => (
         <div key={c.id} className="absolute top-0 select-none" style={{
           left: c.left, fontSize: c.size,
-          animationName: "coinDrop", animationDuration: c.duration,
+          animationName: "fireDrop", animationDuration: c.duration,
           animationDelay: c.delay, animationTimingFunction: "linear",
           animationIterationCount: "3", animationFillMode: "forwards",
         }}>{c.emoji}</div>
@@ -72,7 +69,6 @@ const PawRain = ({ active }: { active: boolean }) => {
   );
 };
 
-/* ─── Bonding Curve Chart ────────────────────────────────────── */
 const BondingCurveChart = ({ userCount }: { userCount: number }) => {
   const maxUsers = 5000;
   const progress = Math.min((userCount / maxUsers) * 100, 73);
@@ -83,58 +79,63 @@ const BondingCurveChart = ({ userCount }: { userCount: number }) => {
   }).join(" ");
 
   return (
-    <div className="glass-card p-6">
+    <div className="rounded-xl p-6" style={{
+      background: "linear-gradient(180deg, rgba(30,10,5,0.8), rgba(15,5,2,0.9))",
+      border: "1px solid rgba(255,100,0,0.15)",
+    }}>
       <div className="flex justify-between items-center mb-4">
         <h3 className="font-orbitron font-bold text-foreground text-sm">Bonding Curve</h3>
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-          <span className="text-primary text-xs font-inter font-semibold">{userCount.toLocaleString()} joined</span>
+          <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#FF6600" }} />
+          <span className="text-xs font-inter font-semibold" style={{ color: "#FF6600" }}>{userCount.toLocaleString()} joined</span>
         </div>
       </div>
       <div className="relative h-32 mb-4">
         <svg viewBox="0 0 100 100" className="w-full h-full" preserveAspectRatio="none">
           {[25, 50, 75].map((y) => (
-            <line key={y} x1="0" y1={y} x2="100" y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" />
+            <line key={y} x1="0" y1={y} x2="100" y2={y} stroke="rgba(255,100,0,0.05)" strokeWidth="0.5" />
           ))}
           <defs>
             <linearGradient id="curveGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(186,100%,50%)" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="hsl(186,100%,50%)" stopOpacity="0.02" />
+              <stop offset="0%" stopColor="#FF6600" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="#FF4400" stopOpacity="0.02" />
             </linearGradient>
             <clipPath id="progressClip"><rect x="0" y="0" width={progress} height="100" /></clipPath>
           </defs>
           <polyline points={points} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
           <g clipPath="url(#progressClip)">
-            <polyline points={points} fill="url(#curveGrad)" stroke="hsl(186,100%,50%)" strokeWidth="1.5" />
+            <polyline points={points} fill="url(#curveGrad)" stroke="#FF6600" strokeWidth="1.5" />
           </g>
-          <circle cx={progress} cy={100 - Math.pow(progress / 100, 0.6) * 100} r="2" fill="hsl(186,100%,50%)" style={{ filter: "drop-shadow(0 0 4px hsl(186,100%,50%))" }} />
+          <circle cx={progress} cy={100 - Math.pow(progress / 100, 0.6) * 100} r="2" fill="#FFD700" style={{ filter: "drop-shadow(0 0 4px #FF6600)" }} />
         </svg>
       </div>
       <div className="space-y-2">
         <div className="flex justify-between text-xs font-inter text-muted-foreground">
           <span>Market cap progress</span>
-          <span className="text-primary">{progress.toFixed(0)}%</span>
+          <span style={{ color: "#FF6600" }}>{progress.toFixed(0)}%</span>
         </div>
-        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-          <div className="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-all duration-1000" style={{ width: `${progress}%` }} />
+        <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(255,100,0,0.1)" }}>
+          <div className="h-full rounded-full transition-all duration-1000" style={{
+            width: `${progress}%`,
+            background: "linear-gradient(90deg, #FF4400, #FFD700)",
+          }} />
         </div>
         <div className="flex justify-between text-xs font-inter text-muted-foreground">
           <span>0 SOL</span>
-          <span>💎 Graduation: 85 SOL</span>
+          <span>🐉 Graduation: 85 SOL</span>
         </div>
       </div>
     </div>
   );
 };
 
-/* ─── Main Section ───────────────────────────────────────────── */
 const SlotDemoSection = () => {
   const [balance, setBalance] = useState(1000);
   const [bet, setBet] = useState(5);
   const [spinning, setSpinning] = useState(false);
   const [lastWin, setLastWin] = useState(0);
   const [isJackpot, setIsJackpot] = useState(false);
-  const [showPawRain, setShowPawRain] = useState(false);
+  const [showFireRain, setShowFireRain] = useState(false);
   const [autoSpin, setAutoSpin] = useState(false);
   const [userCount, setUserCount] = useState(3842);
   const autoSpinRef = useRef<NodeJS.Timeout>();
@@ -144,7 +145,7 @@ const SlotDemoSection = () => {
     setBalance((b) => b - bet);
     setLastWin(0);
     setIsJackpot(false);
-    setShowPawRain(false);
+    setShowFireRain(false);
     setSpinning(true);
   }, [spinning, balance, bet]);
 
@@ -157,12 +158,11 @@ const SlotDemoSection = () => {
     setLastWin(amount);
     setIsJackpot(jackpot);
     if (jackpot) {
-      setShowPawRain(true);
-      setTimeout(() => setShowPawRain(false), 5000);
+      setShowFireRain(true);
+      setTimeout(() => setShowFireRain(false), 5000);
     }
   }, []);
 
-  // Auto spin
   useEffect(() => {
     if (autoSpin && !spinning) {
       autoSpinRef.current = setTimeout(handleSpin, 1500);
@@ -172,7 +172,6 @@ const SlotDemoSection = () => {
     return () => clearTimeout(autoSpinRef.current);
   }, [autoSpin, spinning, handleSpin]);
 
-  // Fake user counter
   useEffect(() => {
     const iv = setInterval(() => setUserCount((c) => c + Math.floor(Math.random() * 3)), 2000);
     return () => clearInterval(iv);
@@ -181,75 +180,87 @@ const SlotDemoSection = () => {
   return (
     <>
       <style>{`
-        @keyframes coinDrop {
+        @keyframes fireDrop {
           0% { transform: translateY(-60px) rotate(0deg); opacity: 1; }
           80% { opacity: 1; }
           100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
         }
-        @keyframes jackpotPulse {
-          0%, 100% { box-shadow: 0 0 30px rgba(255,215,0,0.2), inset 0 0 30px rgba(255,215,0,0.05); }
-          50% { box-shadow: 0 0 60px rgba(255,215,0,0.4), inset 0 0 40px rgba(255,215,0,0.1); }
+        @keyframes dragonPulse {
+          0%, 100% { box-shadow: 0 0 30px rgba(255,80,0,0.2), inset 0 0 30px rgba(255,60,0,0.05); }
+          50% { box-shadow: 0 0 60px rgba(255,80,0,0.4), inset 0 0 40px rgba(255,60,0,0.1); }
         }
       `}</style>
 
-      <PawRain active={showPawRain} />
+      <FireRain active={showFireRain} />
 
       <section id="demo" className="relative py-24 lg:py-32 px-4 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-background/95 via-background to-background/95" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-secondary/5 blur-[150px] pointer-events-none" />
+        <div className="absolute inset-0" style={{
+          background: "linear-gradient(180deg, rgba(10,5,3,0.95), rgba(15,5,2,1), rgba(10,5,3,0.95))",
+        }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[150px] pointer-events-none" style={{
+          background: "radial-gradient(circle, rgba(255,60,0,0.08), transparent)",
+        }} />
 
         <div className="relative max-w-6xl mx-auto">
-          {/* Header */}
           <div className="text-center mb-12">
-            <span className="inline-block text-secondary font-orbitron text-xs tracking-widest uppercase font-semibold mb-4">
-              💎 Live Demo
+            <span className="inline-block font-orbitron text-xs tracking-widest uppercase font-semibold mb-4" style={{ color: "#FF6600" }}>
+              🐉 Live Demo
             </span>
             <h2 className="font-orbitron font-bold text-3xl sm:text-4xl lg:text-5xl text-foreground">
-              See It <span className="gradient-text">In Action</span>
+              Dragon's{" "}
+              <span style={{
+                background: "linear-gradient(135deg, #FF4400, #FFD700, #FF6600)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}>Inferno</span>
             </h2>
             <p className="mt-4 text-muted-foreground font-inter max-w-xl mx-auto">
-              Play the premium crypto slot below. This is what you'll be building — and earning from.
+              Face the dragon in this high-volatility fantasy slot. Massive multipliers await the brave.
             </p>
           </div>
 
           <div className="grid lg:grid-cols-[1fr_320px] gap-8 items-start">
-            {/* ── Slot Machine ── */}
             <div
               className="rounded-2xl overflow-hidden relative"
               style={{
-                background: "linear-gradient(180deg, #12101f 0%, #0a0816 100%)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                boxShadow: "0 20px 80px rgba(0,0,0,0.6)",
-                animation: isJackpot ? "jackpotPulse 0.6s ease-in-out infinite" : "none",
+                background: "linear-gradient(180deg, #1a0a04 0%, #0d0402 100%)",
+                border: "1px solid rgba(255,100,0,0.12)",
+                boxShadow: "0 20px 80px rgba(0,0,0,0.7), 0 0 40px rgba(255,60,0,0.08)",
+                animation: isJackpot ? "dragonPulse 0.6s ease-in-out infinite" : "none",
               }}
             >
               {/* Jackpot display */}
               <div className="text-center py-3" style={{
-                background: "linear-gradient(90deg, rgba(255,215,0,0.05), rgba(255,215,0,0.12), rgba(255,215,0,0.05))",
-                borderBottom: "1px solid rgba(255,215,0,0.15)",
+                background: "linear-gradient(90deg, rgba(255,80,0,0.05), rgba(255,200,0,0.12), rgba(255,80,0,0.05))",
+                borderBottom: "1px solid rgba(255,180,0,0.15)",
               }}>
-                <span className="text-xs font-inter text-muted-foreground uppercase tracking-widest">Progressive Jackpot</span>
-                <div className="font-orbitron font-black text-2xl sm:text-3xl neon-text-gold">
+                <span className="text-xs font-inter text-muted-foreground uppercase tracking-widest">Dragon's Jackpot</span>
+                <div className="font-orbitron font-black text-2xl sm:text-3xl" style={{
+                  background: "linear-gradient(135deg, #FFD700, #FF6600)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  filter: "drop-shadow(0 0 10px rgba(255,150,0,0.3))",
+                }}>
                   5,555,555
                 </div>
               </div>
 
-              {/* Slot header bar */}
+              {/* Slot header */}
               <div className="px-5 py-3 flex items-center justify-between" style={{
-                background: "linear-gradient(90deg, rgba(153,69,255,0.06), rgba(255,215,0,0.06), rgba(0,245,255,0.06))",
-                borderBottom: "1px solid rgba(255,255,255,0.06)",
+                background: "linear-gradient(90deg, rgba(255,60,0,0.04), rgba(255,180,0,0.06), rgba(255,60,0,0.04))",
+                borderBottom: "1px solid rgba(255,150,0,0.06)",
               }}>
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">💎</span>
-                  <span className="font-orbitron font-bold text-sm text-foreground tracking-wider">CRYPTO FORTUNE</span>
+                  <span className="text-lg">🐉</span>
+                  <span className="font-orbitron font-bold text-sm tracking-wider" style={{ color: "#FFD700" }}>DRAGON'S INFERNO</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-muted-foreground text-xs font-inter">10 Paylines</span>
-                  <span className="text-muted-foreground text-xs font-inter">RTP ~95%</span>
+                  <span className="text-muted-foreground text-xs font-inter">High Volatility</span>
                 </div>
               </div>
 
-              {/* Canvas reel area */}
+              {/* Canvas */}
               <div className="flex justify-center py-4 px-2">
                 <SlotCanvas
                   bet={bet}
@@ -265,8 +276,8 @@ const SlotDemoSection = () => {
               {/* Paytable strip */}
               <div className="px-3 sm:px-5 pb-3">
                 <div className="flex items-center justify-center gap-2 sm:gap-3 py-2 rounded-lg flex-wrap" style={{
-                  background: "rgba(255,255,255,0.02)",
-                  border: "1px solid rgba(255,255,255,0.04)",
+                  background: "rgba(255,100,0,0.03)",
+                  border: "1px solid rgba(255,100,0,0.06)",
                 }}>
                   {SYMBOLS.filter(s => !s.isBonus).slice(0, 6).map((sym) => (
                     <div key={sym.id} className="flex items-center gap-1 text-xs">
@@ -278,15 +289,15 @@ const SlotDemoSection = () => {
                 </div>
               </div>
 
-              {/* Controls panel */}
+              {/* Controls */}
               <div className="p-4 sm:p-6" style={{
-                background: "linear-gradient(0deg, rgba(0,0,0,0.4), transparent)",
-                borderTop: "1px solid rgba(255,255,255,0.04)",
+                background: "linear-gradient(0deg, rgba(0,0,0,0.5), transparent)",
+                borderTop: "1px solid rgba(255,100,0,0.06)",
               }}>
                 <div className="flex justify-between items-center mb-4">
                   <div>
                     <div className="text-muted-foreground text-[10px] font-inter uppercase tracking-wider">Balance</div>
-                    <div className="text-primary font-orbitron font-bold text-lg sm:text-xl">
+                    <div className="font-orbitron font-bold text-lg sm:text-xl" style={{ color: "#FFD700" }}>
                       {balance.toFixed(2)}
                     </div>
                   </div>
@@ -297,11 +308,12 @@ const SlotDemoSection = () => {
                         <button
                           key={b}
                           onClick={() => setBet(b)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-orbitron font-bold transition-all ${
-                            bet === b
-                              ? "bg-primary/20 border border-primary/50 text-primary"
-                              : "bg-muted border border-border text-muted-foreground hover:text-foreground"
-                          }`}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-orbitron font-bold transition-all`}
+                          style={{
+                            background: bet === b ? "rgba(255,100,0,0.2)" : "rgba(255,255,255,0.03)",
+                            border: bet === b ? "1px solid rgba(255,150,0,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                            color: bet === b ? "#FFD700" : "rgba(255,255,255,0.5)",
+                          }}
                         >
                           {b}
                         </button>
@@ -318,10 +330,16 @@ const SlotDemoSection = () => {
                   <button
                     onClick={handleSpin}
                     disabled={spinning || balance < bet}
-                    className="btn-primary flex-1 py-3.5 rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group"
+                    className="flex-1 py-3.5 rounded-xl text-sm font-orbitron font-bold disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group transition-all"
+                    style={{
+                      background: "linear-gradient(135deg, #CC2200, #FF6600, #FFD700)",
+                      color: "#FFF",
+                      boxShadow: spinning ? "none" : "0 0 20px rgba(255,80,0,0.3)",
+                      textShadow: "0 1px 3px rgba(0,0,0,0.5)",
+                    }}
                   >
                     <span className="relative z-10">
-                      {spinning ? "⟳ Spinning..." : "🎰 SPIN"}
+                      {spinning ? "⟳ Spinning..." : "🐉 SPIN"}
                     </span>
                     {!spinning && (
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
@@ -329,27 +347,33 @@ const SlotDemoSection = () => {
                   </button>
                   <button
                     onClick={() => setAutoSpin(!autoSpin)}
-                    className={`px-4 py-3 rounded-xl text-sm font-orbitron font-semibold border transition-all ${
-                      autoSpin ? "bg-secondary/20 border-secondary/50 text-secondary" : "btn-outline"
-                    }`}
+                    className="px-4 py-3 rounded-xl text-sm font-orbitron font-semibold transition-all"
+                    style={{
+                      background: autoSpin ? "rgba(255,100,0,0.2)" : "transparent",
+                      border: autoSpin ? "1px solid rgba(255,150,0,0.5)" : "1px solid rgba(255,255,255,0.1)",
+                      color: autoSpin ? "#FFD700" : "rgba(255,255,255,0.5)",
+                    }}
                   >
                     AUTO
                   </button>
                 </div>
 
                 <p className="text-center text-muted-foreground text-xs font-inter mt-3">
-                  💎 10 paylines · 3+ matching = win · 5-of-a-kind = JACKPOT
+                  🔥 10 paylines · 3+ matching = win · 5-of-a-kind = DRAGON JACKPOT
                 </p>
               </div>
             </div>
 
-            {/* ── Right panel ── */}
+            {/* Right panel */}
             <div className="space-y-6">
               <BondingCurveChart userCount={userCount} />
 
-              <div className="glass-card p-6">
+              <div className="rounded-xl p-6" style={{
+                background: "linear-gradient(180deg, rgba(30,10,5,0.8), rgba(15,5,2,0.9))",
+                border: "1px solid rgba(255,100,0,0.1)",
+              }}>
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#FF4400" }} />
                   <span className="font-orbitron text-foreground text-sm font-bold">Live Activity</span>
                 </div>
                 <div className="space-y-2">
@@ -359,9 +383,11 @@ const SlotDemoSection = () => {
                     { addr: "3pQ8...bH4e", action: "bought 20 shares", time: "12s ago" },
                     { addr: "7jL5...cW9k", action: "spun 0.8 SOL", time: "18s ago" },
                   ].map((item, i) => (
-                    <div key={i} className="flex justify-between items-center text-xs font-inter py-1.5 border-b border-border last:border-0">
+                    <div key={i} className="flex justify-between items-center text-xs font-inter py-1.5" style={{
+                      borderBottom: i < 3 ? "1px solid rgba(255,100,0,0.06)" : "none",
+                    }}>
                       <div>
-                        <span className="text-primary/70 font-mono">{item.addr}</span>
+                        <span className="font-mono" style={{ color: "rgba(255,150,0,0.6)" }}>{item.addr}</span>
                         <span className="text-muted-foreground ml-2">{item.action}</span>
                       </div>
                       <span className="text-muted-foreground/50">{item.time}</span>
@@ -370,11 +396,20 @@ const SlotDemoSection = () => {
                 </div>
               </div>
 
-              <div className="glass-card p-6" style={{ border: "1px solid rgba(255,215,0,0.2)", boxShadow: "0 0 20px rgba(255,215,0,0.05)" }}>
+              <div className="rounded-xl p-6" style={{
+                background: "linear-gradient(180deg, rgba(30,10,5,0.8), rgba(15,5,2,0.9))",
+                border: "1px solid rgba(255,180,0,0.2)",
+                boxShadow: "0 0 20px rgba(255,100,0,0.06)",
+              }}>
                 <div className="text-muted-foreground text-xs font-inter uppercase tracking-wider mb-3">
                   Creator earnings (this slot)
                 </div>
-                <div className="font-orbitron font-black text-4xl neon-text-gold mb-1">+2.84 SOL</div>
+                <div className="font-orbitron font-black text-4xl mb-1" style={{
+                  background: "linear-gradient(135deg, #FFD700, #FF6600)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  filter: "drop-shadow(0 0 8px rgba(255,150,0,0.3))",
+                }}>+2.84 SOL</div>
                 <div className="text-muted-foreground text-xs font-inter">Last 24 hours · ~$412 USD</div>
               </div>
             </div>

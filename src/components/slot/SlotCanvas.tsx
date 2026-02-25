@@ -1,6 +1,6 @@
 /**
- * SlotCanvas — Premium Canvas-rendered 5-reel slot machine.
- * Renders reels, animations, particles, and effects at 60fps.
+ * SlotCanvas — Dragon's Inferno — Volcanic canvas-rendered 5-reel slot.
+ * Dark volcanic environment, dragon silhouette, lava glow, fire particles.
  */
 import { useRef, useEffect } from "react";
 import {
@@ -35,11 +35,11 @@ const CANVAS_W = NUM_REELS * REEL_W + (NUM_REELS - 1) * REEL_GAP + FRAME_PAD * 2
 const CANVAS_H = VISIBLE_H + FRAME_PAD * 2 + HEADER_H + FOOTER_H;
 
 // Spin config
-const BASE_SPIN_DURATION = 1200;
-const REEL_DELAY = 150;
-const EXTRA_SYMBOLS = 20;
-const ANTICIPATION_EXTRA_DELAY = 1000;
-const BOUNCE_DURATION = 24;
+const BASE_SPIN_DURATION = 1300;
+const REEL_DELAY = 170;
+const EXTRA_SYMBOLS = 22;
+const ANTICIPATION_EXTRA_DELAY = 1100;
+const BOUNCE_DURATION = 28;
 
 interface SlotCanvasProps {
   bet: number;
@@ -74,8 +74,7 @@ export default function SlotCanvas({
   const anticipateRef = useRef(false);
   const reelStripsRef = useRef<SymbolDef[][]>(Array(NUM_REELS).fill([]));
   const timeRef = useRef(0);
-  // Track reel-stop bounce (overshoot then settle)
-  const reelBounceRef = useRef<number[]>(Array(NUM_REELS).fill(-1)); // -1 = inactive
+  const reelBounceRef = useRef<number[]>(Array(NUM_REELS).fill(-1));
 
   useEffect(() => {
     const dpr = window.devicePixelRatio || 1;
@@ -84,13 +83,11 @@ export default function SlotCanvas({
     if (!canvas) return;
     canvas.width = CANVAS_W * dpr;
     canvas.height = CANVAS_H * dpr;
-    ambientRef.current = createAmbientParticles(CANVAS_W, CANVAS_H, 40);
+    ambientRef.current = createAmbientParticles(CANVAS_W, CANVAS_H, 50);
   }, []);
 
-  // Spin trigger
   useEffect(() => {
     if (!spinning || spinActiveRef.current) return;
-
     const target = generateGrid();
     targetGridRef.current = target;
     spinActiveRef.current = true;
@@ -102,9 +99,7 @@ export default function SlotCanvas({
 
     for (let r = 0; r < NUM_REELS; r++) {
       const strip: SymbolDef[] = [];
-      for (let i = 0; i < EXTRA_SYMBOLS; i++) {
-        strip.push(weightedRandomSymbol());
-      }
+      for (let i = 0; i < EXTRA_SYMBOLS; i++) strip.push(weightedRandomSymbol());
       strip.push(...target[r]);
       reelStripsRef.current[r] = strip;
       reelStoppedRef.current[r] = false;
@@ -112,7 +107,6 @@ export default function SlotCanvas({
     }
   }, [spinning]);
 
-  // Main render loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -133,102 +127,123 @@ export default function SlotCanvas({
       const shakeOff = getShakeOffset(shake);
       ctx.translate(shakeOff.x, shakeOff.y);
 
-      // Clear
       ctx.clearRect(-10, -10, CANVAS_W + 20, CANVAS_H + 20);
 
-      // Background — richer depth gradient
+      // ── VOLCANIC BACKGROUND ──
       const bgGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-      bgGrad.addColorStop(0, "#0f0b1e");
-      bgGrad.addColorStop(0.4, "#0a0714");
-      bgGrad.addColorStop(1, "#05030a");
+      bgGrad.addColorStop(0, "#0a0506");
+      bgGrad.addColorStop(0.3, "#120808");
+      bgGrad.addColorStop(0.7, "#1a0a04");
+      bgGrad.addColorStop(1, "#0d0402");
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Subtle vignette overlay
+      // Lava glow from bottom
+      const lavaGlow = ctx.createLinearGradient(0, CANVAS_H * 0.6, 0, CANVAS_H);
+      lavaGlow.addColorStop(0, "rgba(255,60,0,0)");
+      lavaGlow.addColorStop(0.5, `rgba(255,50,0,${0.06 + Math.sin(timeRef.current * 0.02) * 0.03})`);
+      lavaGlow.addColorStop(1, `rgba(255,30,0,${0.12 + Math.sin(timeRef.current * 0.015) * 0.05})`);
+      ctx.fillStyle = lavaGlow;
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+      // Vignette
       const vignette = ctx.createRadialGradient(
-        CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.25,
-        CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.75
+        CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.2,
+        CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.8
       );
       vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(1, "rgba(0,0,0,0.35)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.45)");
       ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Warm center glow (gives depth)
-      const centerGlow = ctx.createRadialGradient(
-        CANVAS_W / 2, CANVAS_H * 0.45, 0,
-        CANVAS_W / 2, CANVAS_H * 0.45, CANVAS_W * 0.5
+      // Dragon silhouette — subtle breathing glow behind reels
+      const dragonBreath = 0.5 + Math.sin(timeRef.current * 0.015) * 0.5;
+      const dragonGlow = ctx.createRadialGradient(
+        CANVAS_W / 2, CANVAS_H * 0.35, 0,
+        CANVAS_W / 2, CANVAS_H * 0.35, CANVAS_W * 0.45
       );
-      centerGlow.addColorStop(0, "rgba(153, 69, 255, 0.04)");
-      centerGlow.addColorStop(0.5, "rgba(100, 50, 200, 0.02)");
-      centerGlow.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = centerGlow;
+      dragonGlow.addColorStop(0, `rgba(200, 40, 0, ${0.08 + dragonBreath * 0.06})`);
+      dragonGlow.addColorStop(0.4, `rgba(150, 20, 0, ${0.04 + dragonBreath * 0.03})`);
+      dragonGlow.addColorStop(1, "rgba(100, 0, 0, 0)");
+      ctx.fillStyle = dragonGlow;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Ambient particles — premium glow rendering
+      // Dragon eye hints — two faint glowing dots above reels
+      const eyeAlpha = 0.08 + dragonBreath * 0.06;
+      for (const side of [-1, 1]) {
+        const ex = CANVAS_W / 2 + side * CANVAS_W * 0.12;
+        const ey = HEADER_H * 0.5;
+        const eyeGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, 8);
+        eyeGrad.addColorStop(0, `rgba(255, 200, 0, ${eyeAlpha})`);
+        eyeGrad.addColorStop(0.5, `rgba(255, 100, 0, ${eyeAlpha * 0.5})`);
+        eyeGrad.addColorStop(1, "rgba(255, 50, 0, 0)");
+        ctx.fillStyle = eyeGrad;
+        ctx.fillRect(ex - 12, ey - 12, 24, 24);
+      }
+
+      // Floating embers
       ambientRef.current = updateAmbientParticles(ambientRef.current, timeRef.current, CANVAS_H);
       for (const p of ambientRef.current) {
         drawAmbientParticle(ctx, p, timeRef.current);
       }
 
-      // Light sweep — wider, softer
-      lightSweepRef.current = (lightSweepRef.current + 0.003) % 1;
+      // Light sweep — warm tones
+      lightSweepRef.current = (lightSweepRef.current + 0.002) % 1;
       const sweepX = lightSweepRef.current * (CANVAS_W + 300) - 150;
-      const sweepGrad = ctx.createLinearGradient(sweepX - 120, 0, sweepX + 120, 0);
-      sweepGrad.addColorStop(0, "rgba(255,255,255,0)");
-      sweepGrad.addColorStop(0.3, "rgba(200,180,255,0.015)");
-      sweepGrad.addColorStop(0.5, "rgba(255,255,255,0.05)");
-      sweepGrad.addColorStop(0.7, "rgba(200,180,255,0.015)");
-      sweepGrad.addColorStop(1, "rgba(255,255,255,0)");
+      const sweepGrad = ctx.createLinearGradient(sweepX - 100, 0, sweepX + 100, 0);
+      sweepGrad.addColorStop(0, "rgba(255,200,100,0)");
+      sweepGrad.addColorStop(0.3, "rgba(255,150,50,0.015)");
+      sweepGrad.addColorStop(0.5, "rgba(255,200,100,0.04)");
+      sweepGrad.addColorStop(0.7, "rgba(255,150,50,0.015)");
+      sweepGrad.addColorStop(1, "rgba(255,200,100,0)");
       ctx.fillStyle = sweepGrad;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Frame border glow — outer bloom + inner stroke
+      // Frame border — molten gold with fire glow
       ctx.save();
-      ctx.shadowColor = "rgba(153,69,255,0.4)";
-      ctx.shadowBlur = 15;
+      ctx.shadowColor = "rgba(255,100,0,0.5)";
+      ctx.shadowBlur = 18;
       const frameGrad = ctx.createLinearGradient(0, 0, CANVAS_W, CANVAS_H);
-      frameGrad.addColorStop(0, "rgba(153,69,255,0.35)");
-      frameGrad.addColorStop(0.3, "rgba(255,215,0,0.25)");
-      frameGrad.addColorStop(0.7, "rgba(0,200,255,0.2)");
-      frameGrad.addColorStop(1, "rgba(153,69,255,0.35)");
+      frameGrad.addColorStop(0, "rgba(255,180,0,0.4)");
+      frameGrad.addColorStop(0.3, "rgba(255,100,0,0.3)");
+      frameGrad.addColorStop(0.7, "rgba(255,180,0,0.35)");
+      frameGrad.addColorStop(1, "rgba(200,50,0,0.3)");
       ctx.strokeStyle = frameGrad;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.5;
       roundRect(ctx, 1, 1, CANVAS_W - 2, CANVAS_H - 2, 16);
       ctx.stroke();
       ctx.shadowBlur = 0;
-      // Inner highlight line
-      ctx.strokeStyle = "rgba(255,255,255,0.04)";
+      ctx.strokeStyle = "rgba(255,200,100,0.06)";
       ctx.lineWidth = 1;
       roundRect(ctx, 3, 3, CANVAS_W - 6, CANVAS_H - 6, 14);
       ctx.stroke();
       ctx.restore();
 
-      // Draw reels
+      // ── REELS ──
       const reelAreaY = HEADER_H + FRAME_PAD;
       for (let r = 0; r < NUM_REELS; r++) {
         const rx = FRAME_PAD + r * (REEL_W + REEL_GAP);
 
-        // Reel background — layered depth
+        // Reel background — dark with warm undertone
         const reelBg = ctx.createLinearGradient(rx, reelAreaY, rx, reelAreaY + VISIBLE_H);
-        reelBg.addColorStop(0, "rgba(0,0,0,0.5)");
-        reelBg.addColorStop(0.5, "rgba(5,3,15,0.45)");
-        reelBg.addColorStop(1, "rgba(0,0,0,0.5)");
+        reelBg.addColorStop(0, "rgba(15,5,2,0.6)");
+        reelBg.addColorStop(0.5, "rgba(10,3,1,0.5)");
+        reelBg.addColorStop(1, "rgba(15,5,2,0.6)");
         ctx.fillStyle = reelBg;
         roundRect(ctx, rx, reelAreaY, REEL_W, VISIBLE_H, 8);
         ctx.fill();
 
-        // Reel inner shadow
+        // Inner shadow
         const innerShadow = ctx.createLinearGradient(rx, reelAreaY, rx + REEL_W, reelAreaY);
-        innerShadow.addColorStop(0, "rgba(0,0,0,0.2)");
+        innerShadow.addColorStop(0, "rgba(0,0,0,0.25)");
         innerShadow.addColorStop(0.15, "rgba(0,0,0,0)");
         innerShadow.addColorStop(0.85, "rgba(0,0,0,0)");
-        innerShadow.addColorStop(1, "rgba(0,0,0,0.2)");
+        innerShadow.addColorStop(1, "rgba(0,0,0,0.25)");
         ctx.fillStyle = innerShadow;
         ctx.fillRect(rx, reelAreaY, REEL_W, VISIBLE_H);
 
-        // Reel border — subtle highlight
-        ctx.strokeStyle = "rgba(255,255,255,0.07)";
+        // Reel border
+        ctx.strokeStyle = "rgba(255,150,50,0.08)";
         ctx.lineWidth = 1;
         roundRect(ctx, rx, reelAreaY, REEL_W, VISIBLE_H, 8);
         ctx.stroke();
@@ -248,7 +263,6 @@ export default function SlotCanvas({
 
           const elapsed = now - startTime;
           const progress = Math.min(elapsed / duration, 1);
-          // Use easeOutBack for overshoot feel on the last 30%
           const eased = progress < 0.7
             ? easeOutExpo(progress / 0.7) * 0.85
             : 0.85 + easeOutBack((progress - 0.7) / 0.3) * 0.15;
@@ -257,15 +271,15 @@ export default function SlotCanvas({
           const totalHeight = strip.length * CELL_H;
           const offset = Math.min(eased, 1.0) * (totalHeight - VISIBLE_H);
 
-          // Motion blur — layered: CSS blur + transparency trails
+          // Heavy motion blur
           const spinSpeed = progress < 0.65 ? Math.sin((progress / 0.65) * Math.PI) : 0;
           if (progress > 0.02 && progress < 0.65) {
-            ctx.filter = `blur(${spinSpeed * 4}px)`;
-            // Speed lines — vertical streaks for motion feel
-            ctx.fillStyle = `rgba(150, 130, 255, ${spinSpeed * 0.04})`;
-            for (let sl = 0; sl < 3; sl++) {
+            ctx.filter = `blur(${spinSpeed * 5}px)`;
+            // Fire speed lines
+            ctx.fillStyle = `rgba(255, 100, 0, ${spinSpeed * 0.06})`;
+            for (let sl = 0; sl < 4; sl++) {
               const slx = rx + REEL_PADDING + Math.random() * (REEL_W - REEL_PADDING * 2);
-              ctx.fillRect(slx, reelAreaY, 1, VISIBLE_H);
+              ctx.fillRect(slx, reelAreaY, 1.5, VISIBLE_H);
             }
           }
 
@@ -285,7 +299,7 @@ export default function SlotCanvas({
 
           if (progress >= 1) {
             reelStoppedRef.current[r] = true;
-            reelBounceRef.current[r] = 0; // start bounce animation
+            reelBounceRef.current[r] = 0;
             gridRef.current[r] = targetGridRef.current[r];
 
             if (r === 3) {
@@ -299,23 +313,22 @@ export default function SlotCanvas({
               const totalWin = wins.reduce((s, w) => s + w.payout, 0);
 
               if (totalWin > 0) {
-                winFlashRef.current = 90; // longer flash for premium feel
-
+                winFlashRef.current = 100;
                 for (const w of wins) {
                   for (let wr = 0; wr < w.count; wr++) {
                     const px = FRAME_PAD + wr * (REEL_W + REEL_GAP) + REEL_W / 2;
                     const py = reelAreaY + w.positions[wr] * CELL_H + CELL_H / 2;
                     particlesRef.current.push(
-                      ...createWinParticles(px, py, 16, w.symbol.color)
+                      ...createWinParticles(px, py, 20, w.symbol.color)
                     );
                     bounceRef.current.set(`${wr}_${w.positions[wr]}`, 0);
                   }
                 }
 
                 if (totalWin >= bet * 10) {
-                  shakeRef.current = { active: true, intensity: 8, duration: 30, elapsed: 0 };
+                  shakeRef.current = { active: true, intensity: 10, duration: 35, elapsed: 0 };
                 } else if (totalWin >= bet * 3) {
-                  shakeRef.current = { active: true, intensity: 3, duration: 15, elapsed: 0 };
+                  shakeRef.current = { active: true, intensity: 4, duration: 18, elapsed: 0 };
                 }
 
                 onWin(totalWin, totalWin >= bet * 20);
@@ -324,18 +337,15 @@ export default function SlotCanvas({
             }
           }
         } else {
-          // Static reel — draw with bounce and win highlights
+          // Static reel
           const currentGrid = gridRef.current[r];
-          
-          // Reel-stop bounce offset (whole reel bounces on stop)
           let reelBounceOff = 0;
           if (reelBounceRef.current[r] >= 0) {
             const bp = reelBounceRef.current[r];
             reelBounceRef.current[r]++;
             if (bp < BOUNCE_DURATION) {
               const t = bp / BOUNCE_DURATION;
-              // Damped oscillation
-              reelBounceOff = Math.sin(t * Math.PI * 3) * (1 - t) * 6;
+              reelBounceOff = Math.sin(t * Math.PI * 3) * (1 - t) * 8;
             } else {
               reelBounceRef.current[r] = -1;
             }
@@ -347,19 +357,17 @@ export default function SlotCanvas({
             const bounceKey = `${r}_${row}`;
             let symbolBounce = 0;
 
-            // Win symbol bounce — elastic
             if (bounceRef.current.has(bounceKey)) {
               const bp = bounceRef.current.get(bounceKey)!;
               bounceRef.current.set(bounceKey, bp + 1);
-              if (bp < 30) {
-                const t = bp / 30;
-                symbolBounce = Math.sin(t * Math.PI * 2.5) * (1 - t) * -12;
+              if (bp < 35) {
+                const t = bp / 35;
+                symbolBounce = Math.sin(t * Math.PI * 3) * (1 - t) * -14;
               } else {
                 bounceRef.current.delete(bounceKey);
               }
             }
 
-            // Win highlight
             const isWinning = winResultsRef.current.some(
               (w) => w.positions[r] === row && r < w.count
             );
@@ -369,15 +377,14 @@ export default function SlotCanvas({
               );
               drawWinHighlight(
                 ctx, rx, reelAreaY + sy, REEL_W, CELL_H - GAP,
-                winSym?.symbol.color ?? "#FFD700",
-                winFlashRef.current / 90
+                winSym?.symbol.color ?? "#FF4400",
+                winFlashRef.current / 100
               );
             }
 
             const symCanvas = getSymbolCanvas(sym, SYMBOL_RENDER_SIZE);
-            // Win symbols scale up slightly
             const scale = isWinning && winFlashRef.current > 0
-              ? 1 + Math.sin((winFlashRef.current / 90) * Math.PI * 3) * 0.06
+              ? 1 + Math.sin((winFlashRef.current / 100) * Math.PI * 3) * 0.08
               : 1;
             const drawSize = SYMBOL_SIZE * scale;
             const drawOffset = (SYMBOL_SIZE - drawSize) / 2;
@@ -393,28 +400,53 @@ export default function SlotCanvas({
 
         ctx.restore();
 
-        // Top/bottom reel fade masks
-        const fadeH = 18;
+        // Fade masks — dark volcanic color
+        const fadeH = 20;
         const topFade = ctx.createLinearGradient(0, reelAreaY, 0, reelAreaY + fadeH);
-        topFade.addColorStop(0, "#0d0a1a");
-        topFade.addColorStop(1, "rgba(13,10,26,0)");
+        topFade.addColorStop(0, "#0a0506");
+        topFade.addColorStop(1, "rgba(10,5,6,0)");
         ctx.fillStyle = topFade;
         ctx.fillRect(rx, reelAreaY, REEL_W, fadeH);
 
         const botFade = ctx.createLinearGradient(0, reelAreaY + VISIBLE_H - fadeH, 0, reelAreaY + VISIBLE_H);
-        botFade.addColorStop(0, "rgba(13,10,26,0)");
-        botFade.addColorStop(1, "#0d0a1a");
+        botFade.addColorStop(0, "rgba(10,5,6,0)");
+        botFade.addColorStop(1, "#0a0506");
         ctx.fillStyle = botFade;
         ctx.fillRect(rx, reelAreaY + VISIBLE_H - fadeH, REEL_W, fadeH);
       }
 
-      // Win payline indicators
+      // Lava glow beneath reels
+      const lavaY = reelAreaY + VISIBLE_H - 5;
+      const lavaUnder = ctx.createLinearGradient(FRAME_PAD, lavaY, FRAME_PAD, lavaY + 25);
+      const lavaPulse = 0.5 + Math.sin(timeRef.current * 0.03) * 0.3;
+      lavaUnder.addColorStop(0, `rgba(255,80,0,${0.15 + lavaPulse * 0.1})`);
+      lavaUnder.addColorStop(0.5, `rgba(255,40,0,${0.08 + lavaPulse * 0.05})`);
+      lavaUnder.addColorStop(1, "rgba(255,20,0,0)");
+      ctx.fillStyle = lavaUnder;
+      ctx.fillRect(FRAME_PAD, lavaY, CANVAS_W - FRAME_PAD * 2, 25);
+
+      // Win paylines — fire colored
       if (winFlashRef.current > 0) {
         winFlashRef.current--;
         for (const w of winResultsRef.current) {
-          // Animated dash offset
-          const dashOffset = timeRef.current * 2;
-          ctx.strokeStyle = w.symbol.color + "90";
+          const dashOffset = timeRef.current * 2.5;
+          // Outer glow line
+          ctx.shadowColor = w.symbol.color;
+          ctx.shadowBlur = 10;
+          ctx.strokeStyle = w.symbol.color + "60";
+          ctx.lineWidth = 8;
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          for (let wr = 0; wr < w.count; wr++) {
+            const px = FRAME_PAD + wr * (REEL_W + REEL_GAP) + REEL_W / 2;
+            const py = reelAreaY + w.positions[wr] * CELL_H + CELL_H / 2;
+            if (wr === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+
+          // Inner dashed line
+          ctx.strokeStyle = "#FFD700CC";
           ctx.lineWidth = 2.5;
           ctx.setLineDash([6, 4]);
           ctx.lineDashOffset = dashOffset;
@@ -422,35 +454,20 @@ export default function SlotCanvas({
           for (let wr = 0; wr < w.count; wr++) {
             const px = FRAME_PAD + wr * (REEL_W + REEL_GAP) + REEL_W / 2;
             const py = reelAreaY + w.positions[wr] * CELL_H + CELL_H / 2;
-            if (wr === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
-          }
-          ctx.stroke();
-          // Glow line
-          ctx.strokeStyle = w.symbol.color + "30";
-          ctx.lineWidth = 6;
-          ctx.setLineDash([]);
-          ctx.beginPath();
-          for (let wr = 0; wr < w.count; wr++) {
-            const px = FRAME_PAD + wr * (REEL_W + REEL_GAP) + REEL_W / 2;
-            const py = reelAreaY + w.positions[wr] * CELL_H + CELL_H / 2;
-            if (wr === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
+            if (wr === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
           }
           ctx.stroke();
           ctx.setLineDash([]);
         }
       }
 
-      // Particles — premium rendering
+      // Particles
       particlesRef.current = updateParticles(particlesRef.current);
-      for (const p of particlesRef.current) {
-        drawParticle(ctx, p);
-      }
+      for (const p of particlesRef.current) drawParticle(ctx, p);
 
       // Center payline marker
       const lineY = reelAreaY + 1 * CELL_H + CELL_H / 2;
-      ctx.strokeStyle = "rgba(255,215,0,0.12)";
+      ctx.strokeStyle = "rgba(255,180,0,0.12)";
       ctx.lineWidth = 1;
       ctx.setLineDash([8, 6]);
       ctx.beginPath();
@@ -459,10 +476,10 @@ export default function SlotCanvas({
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Payline arrows
+      // Payline arrows — gold/fire
       for (const side of [-1, 1]) {
         const ax = side === -1 ? FRAME_PAD - 8 : CANVAS_W - FRAME_PAD + 8;
-        ctx.fillStyle = "rgba(255,215,0,0.25)";
+        ctx.fillStyle = "rgba(255,180,0,0.3)";
         ctx.beginPath();
         ctx.moveTo(ax, lineY - 5);
         ctx.lineTo(ax + side * 6, lineY);
@@ -471,7 +488,7 @@ export default function SlotCanvas({
         ctx.fill();
       }
 
-      // Anticipation effect on last reel
+      // Anticipation
       if (anticipateRef.current && !reelStoppedRef.current[NUM_REELS - 1]) {
         const lastReelX = FRAME_PAD + (NUM_REELS - 1) * (REEL_W + REEL_GAP);
         drawAnticipationEffect(ctx, lastReelX, reelAreaY, REEL_W, VISIBLE_H, timeRef.current);

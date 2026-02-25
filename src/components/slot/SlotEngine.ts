@@ -1,28 +1,30 @@
 /**
- * SlotEngine — Core game logic for a 5-reel, 3-row slot machine.
- * Handles symbol generation, weighted distribution, payline evaluation, and RTP targeting.
+ * SlotEngine — Core game logic for Dragon's Inferno 5-reel, 3-row slot.
+ * High-volatility fantasy dragon theme.
  */
 
 export interface SymbolDef {
   id: string;
   name: string;
   color: string;
-  weight: number;      // Higher = more common
-  multiplier: number;  // Payout multiplier for 5-of-a-kind
+  weight: number;
+  multiplier: number;
   isBonus?: boolean;
 }
 
 export const SYMBOLS: SymbolDef[] = [
-  { id: "bitcoin",   name: "Bitcoin",   color: "#F7931A", weight: 8,  multiplier: 50 },
-  { id: "ethereum",  name: "Ethereum",  color: "#627EEA", weight: 10, multiplier: 25 },
-  { id: "solana",    name: "Solana",    color: "#9945FF", weight: 12, multiplier: 15 },
-  { id: "diamond",   name: "Diamond",   color: "#00F5FF", weight: 15, multiplier: 10 },
-  { id: "gold_bar",  name: "Gold Bar",  color: "#FFD700", weight: 18, multiplier: 8  },
-  { id: "seven",     name: "Lucky 7",   color: "#FF00AA", weight: 20, multiplier: 5  },
-  { id: "cherry",    name: "Cherry",    color: "#FF4444", weight: 25, multiplier: 3  },
-  { id: "bell",      name: "Bell",      color: "#FFAB00", weight: 28, multiplier: 2  },
-  { id: "star",      name: "Star",      color: "#E040FB", weight: 30, multiplier: 2  },
-  { id: "bonus",     name: "Bonus",     color: "#00FF88", weight: 5,  multiplier: 0, isBonus: true },
+  { id: "dragon",    name: "Dragon",     color: "#FF2200", weight: 5,   multiplier: 75 },
+  { id: "sword",     name: "Flame Sword",color: "#FF6600", weight: 8,   multiplier: 40 },
+  { id: "treasure",  name: "Treasure",   color: "#FFD700", weight: 10,  multiplier: 25 },
+  { id: "fire_orb",  name: "Fire Orb",   color: "#FF4400", weight: 14,  multiplier: 15 },
+  { id: "red_gem",   name: "Red Gem",    color: "#CC0033", weight: 16,  multiplier: 10 },
+  { id: "gold_coin", name: "Gold Coin",  color: "#FFAA00", weight: 18,  multiplier: 8  },
+  { id: "ace",       name: "A",          color: "#E8C060", weight: 22,  multiplier: 4  },
+  { id: "king",      name: "K",          color: "#D4A040", weight: 24,  multiplier: 3  },
+  { id: "queen",     name: "Q",          color: "#C09030", weight: 26,  multiplier: 2.5},
+  { id: "jack",      name: "J",          color: "#B08028", weight: 28,  multiplier: 2  },
+  { id: "ten",       name: "10",         color: "#A07020", weight: 30,  multiplier: 1.5},
+  { id: "scatter",   name: "Scatter",    color: "#FF0044", weight: 4,   multiplier: 0, isBonus: true },
 ];
 
 const TOTAL_WEIGHT = SYMBOLS.reduce((sum, s) => sum + s.weight, 0);
@@ -30,21 +32,19 @@ const TOTAL_WEIGHT = SYMBOLS.reduce((sum, s) => sum + s.weight, 0);
 export const NUM_REELS = 5;
 export const NUM_ROWS = 3;
 
-// 10 paylines (indices per reel: 0=top, 1=mid, 2=bot)
 export const PAYLINES: number[][] = [
-  [1, 1, 1, 1, 1], // center
-  [0, 0, 0, 0, 0], // top
-  [2, 2, 2, 2, 2], // bottom
-  [0, 1, 2, 1, 0], // V shape
-  [2, 1, 0, 1, 2], // inverted V
-  [0, 0, 1, 2, 2], // diagonal down
-  [2, 2, 1, 0, 0], // diagonal up
-  [1, 0, 0, 0, 1], // W top
-  [1, 2, 2, 2, 1], // W bottom
-  [0, 1, 0, 1, 0], // zigzag
+  [1, 1, 1, 1, 1],
+  [0, 0, 0, 0, 0],
+  [2, 2, 2, 2, 2],
+  [0, 1, 2, 1, 0],
+  [2, 1, 0, 1, 2],
+  [0, 0, 1, 2, 2],
+  [2, 2, 1, 0, 0],
+  [1, 0, 0, 0, 1],
+  [1, 2, 2, 2, 1],
+  [0, 1, 0, 1, 0],
 ];
 
-/** Pick a random symbol based on weights */
 export function weightedRandomSymbol(): SymbolDef {
   let r = Math.random() * TOTAL_WEIGHT;
   for (const sym of SYMBOLS) {
@@ -54,7 +54,6 @@ export function weightedRandomSymbol(): SymbolDef {
   return SYMBOLS[SYMBOLS.length - 1];
 }
 
-/** Generate a full grid of symbols (5 reels × 3 rows) */
 export function generateGrid(): SymbolDef[][] {
   return Array.from({ length: NUM_REELS }, () =>
     Array.from({ length: NUM_ROWS }, () => weightedRandomSymbol())
@@ -63,13 +62,12 @@ export function generateGrid(): SymbolDef[][] {
 
 export interface WinResult {
   paylineIndex: number;
-  positions: number[];   // row index for each reel on this payline
+  positions: number[];
   symbol: SymbolDef;
   count: number;
   payout: number;
 }
 
-/** Evaluate all paylines and return wins */
 export function evaluateWins(grid: SymbolDef[][], bet: number): WinResult[] {
   const wins: WinResult[] = [];
 
@@ -85,7 +83,6 @@ export function evaluateWins(grid: SymbolDef[][], bet: number): WinResult[] {
     }
 
     if (count >= 3) {
-      // Payout scales: 3-of-kind = mult*1, 4-of-kind = mult*3, 5-of-kind = mult*full
       const payScale = count === 5 ? 1 : count === 4 ? 0.4 : 0.15;
       const payout = bet * firstSym.multiplier * payScale;
       wins.push({
@@ -101,7 +98,6 @@ export function evaluateWins(grid: SymbolDef[][], bet: number): WinResult[] {
   return wins;
 }
 
-/** Count bonus symbols across the grid */
 export function countBonusSymbols(grid: SymbolDef[][]): number {
   let count = 0;
   for (const reel of grid) {
@@ -112,7 +108,6 @@ export function countBonusSymbols(grid: SymbolDef[][]): number {
   return count;
 }
 
-/** Check if 2+ bonus symbols in first 4 reels (anticipation trigger) */
 export function shouldAnticipate(grid: SymbolDef[][], reelsStopped: number): boolean {
   if (reelsStopped < 3) return false;
   let bonusCount = 0;
