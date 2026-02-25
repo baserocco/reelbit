@@ -27,12 +27,19 @@ function getCtx(): AudioContext {
     sfxGain.gain.value = 0.4;
     sfxGain.connect(masterGain);
   }
-  if (ctx.state === "suspended") ctx.resume();
   return ctx;
 }
 
+async function ensureCtxResumed(): Promise<AudioContext> {
+  const c = getCtx();
+  if (c.state === "suspended") {
+    await c.resume();
+  }
+  return c;
+}
+
 function getSfx(): GainNode {
-  getCtx();
+  ensureCtxResumed();
   return sfxGain!;
 }
 
@@ -96,9 +103,9 @@ function delayedOsc(delay: number, freq: number, type: OscillatorType, gain: num
 // AMBIENT MUSIC — Cinematic Dark Fantasy
 // ════════════════════════════════════════
 
-export function startAmbient() {
+export async function startAmbient() {
   if (ambientPlaying) return;
-  const c = getCtx();
+  const c = await ensureCtxResumed();
   ambientPlaying = true;
   ambientNodes = [];
 

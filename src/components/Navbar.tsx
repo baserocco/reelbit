@@ -20,13 +20,13 @@ const Navbar = () => {
     document.getElementById("waitlist-form")?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
-  const toggleAmbient = useCallback(() => {
+  const toggleAmbient = useCallback(async () => {
     if (ambientOn) {
       stopAmbient();
       setAmbientOn(false);
       setShowVolume(false);
     } else {
-      startAmbient();
+      await startAmbient();
       setAmbientOn(true);
       setShowVolume(true);
     }
