@@ -1,13 +1,15 @@
 /**
- * SlotCanvas — Dragon's Inferno — Volcanic canvas-rendered 5-reel slot.
- * Dark volcanic environment, dragon silhouette, lava glow, fire particles.
+ * SlotCanvas — Dragon's Inferno Premium AAA.
+ * 5-reel 3-row canvas slot with tumble/cascade, free spins, sticky wilds.
  */
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import {
-  SYMBOLS, NUM_REELS, NUM_ROWS, PAYLINES,
+  SYMBOLS, NUM_REELS, NUM_ROWS,
   generateGrid, evaluateWins, shouldAnticipate,
-  weightedRandomSymbol,
-  type SymbolDef, type WinResult,
+  weightedRandomSymbol, getWinningCells, tumbleGrid,
+  getTumbleMultiplier, countBonusSymbols, getFreespinsCount,
+  type SymbolDef, type WinResult, type GameState,
+  createInitialGameState,
 } from "./SlotEngine";
 import {
   easeOutExpo, easeOutBack,
@@ -41,6 +43,10 @@ const EXTRA_SYMBOLS = 22;
 const ANTICIPATION_EXTRA_DELAY = 1100;
 const BOUNCE_DURATION = 38;
 
+// Tumble config
+const TUMBLE_DELAY = 600;  // ms pause before tumble
+const TUMBLE_FALL_DURATION = 400; // ms for new symbols to fall in
+
 interface SlotCanvasProps {
   bet: number;
   balance: number;
@@ -49,11 +55,16 @@ interface SlotCanvasProps {
   spinning: boolean;
   onSpinStart: () => void;
   onSpinEnd: () => void;
+  gameState: GameState;
+  onGameStateChange: (state: GameState) => void;
+  onFreeSpinsTrigger: (count: number) => void;
+  onTumbleWin: (amount: number, multiplier: number) => void;
 }
 
 export default function SlotCanvas({
   bet, balance, onBalanceChange, onWin,
   spinning, onSpinStart, onSpinEnd,
+  gameState, onGameStateChange, onFreeSpinsTrigger, onTumbleWin,
 }: SlotCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
@@ -76,6 +87,21 @@ export default function SlotCanvas({
   const timeRef = useRef(0);
   const reelBounceRef = useRef<number[]>(Array(NUM_REELS).fill(-1));
 
+  // Tumble state
+  const tumbleActiveRef = useRef(false);
+  const tumblePhaseRef = useRef<"idle" | "removing" | "falling" | "evaluating">("idle");
+  const tumbleTimerRef = useRef(0);
+  const removingCellsRef = useRef<Set<string>>(new Set());
+  const removeFadeRef = useRef(0); // 0-1 progress of removal animation
+  const fallProgressRef = useRef(0); // 0-1 progress of fall animation
+  const gameStateRef = useRef(gameState);
+  const stickyWildsRef = useRef<Set<string>>(new Set());
+
+  // Keep ref in sync
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
   useEffect(() => {
     const dpr = window.devicePixelRatio || 1;
     dprRef.current = dpr;
@@ -86,9 +112,93 @@ export default function SlotCanvas({
     ambientRef.current = createAmbientParticles(CANVAS_W, CANVAS_H, 75);
   }, []);
 
+  // Start tumble evaluation after reels stop
+  const startTumbleEvaluation = useCallback(() => {
+    const grid = gridRef.current;
+    const gs = gameStateRef.current;
+    const mult = getTumbleMultiplier(gs.tumbleCount, gs.mode === "freespins");
+    const wins = evaluateWins(grid, bet, mult);
+    winResultsRef.current = wins;
+
+    if (wins.length > 0) {
+      const totalWin = wins.reduce((s, w) => s + w.payout, 0);
+      winFlashRef.current = 80;
+
+      // Create particles for wins
+      const reelAreaY = HEADER_H + FRAME_PAD;
+      for (const w of wins) {
+        for (let wr = 0; wr < w.count; wr++) {
+          const px = FRAME_PAD + wr * (REEL_W + REEL_GAP) + REEL_W / 2;
+          const py = reelAreaY + w.positions[wr] * CELL_H + CELL_H / 2;
+          particlesRef.current.push(...createWinParticles(px, py, 25, w.symbol.color));
+          bounceRef.current.set(`${wr}_${w.positions[wr]}`, 0);
+        }
+      }
+
+      if (totalWin >= bet * 10) {
+        shakeRef.current = { active: true, intensity: 16, duration: 45, elapsed: 0 };
+      } else if (totalWin >= bet * 3) {
+        shakeRef.current = { active: true, intensity: 7, duration: 25, elapsed: 0 };
+      } else {
+        shakeRef.current = { active: true, intensity: 2.5, duration: 12, elapsed: 0 };
+      }
+
+      onTumbleWin(totalWin, mult);
+
+      // Mark cells for removal → tumble
+      const winCells = getWinningCells(wins);
+      removingCellsRef.current = winCells;
+      tumblePhaseRef.current = "removing";
+      removeFadeRef.current = 0;
+      tumbleTimerRef.current = performance.now();
+      tumbleActiveRef.current = true;
+
+      // Update tumble count
+      const newGs = { ...gs, tumbleCount: gs.tumbleCount + 1 };
+
+      // Track sticky wilds during free spins
+      if (gs.mode === "freespins") {
+        for (let r = 0; r < NUM_REELS; r++) {
+          for (let row = 0; row < NUM_ROWS; row++) {
+            if (grid[r][row].isWild) {
+              stickyWildsRef.current.add(`${r}_${row}`);
+              if (!newGs.stickyWilds.some(([a, b]) => a === r && b === row)) {
+                newGs.stickyWilds = [...newGs.stickyWilds, [r, row]];
+              }
+            }
+          }
+        }
+      }
+
+      onGameStateChange(newGs);
+    } else {
+      // No more wins — tumble sequence done
+      tumbleActiveRef.current = false;
+      tumblePhaseRef.current = "idle";
+
+      // Check for scatter trigger
+      const scatterCount = countBonusSymbols(grid);
+      if (scatterCount >= 3 && gs.mode === "base") {
+        const freeCount = getFreespinsCount(scatterCount);
+        onFreeSpinsTrigger(freeCount);
+      }
+
+      onSpinEnd();
+    }
+  }, [bet, onTumbleWin, onSpinEnd, onGameStateChange, onFreeSpinsTrigger]);
+
   useEffect(() => {
     if (!spinning || spinActiveRef.current) return;
     const target = generateGrid();
+
+    // Apply sticky wilds during free spins
+    if (gameStateRef.current.mode === "freespins") {
+      for (const [r, row] of gameStateRef.current.stickyWilds) {
+        const wildSym = SYMBOLS.find(s => s.isWild);
+        if (wildSym) target[r][row] = wildSym;
+      }
+    }
+
     targetGridRef.current = target;
     spinActiveRef.current = true;
     anticipateRef.current = false;
@@ -96,6 +206,13 @@ export default function SlotCanvas({
     winFlashRef.current = 0;
     bounceRef.current.clear();
     reelBounceRef.current = Array(NUM_REELS).fill(-1);
+    tumbleActiveRef.current = false;
+    tumblePhaseRef.current = "idle";
+    removingCellsRef.current = new Set();
+
+    // Reset tumble count for new spin
+    const gs = gameStateRef.current;
+    onGameStateChange({ ...gs, tumbleCount: 0 });
 
     for (let r = 0; r < NUM_REELS; r++) {
       const strip: SymbolDef[] = [];
@@ -105,7 +222,7 @@ export default function SlotCanvas({
       reelStoppedRef.current[r] = false;
       reelStartTimeRef.current[r] = performance.now() + r * REEL_DELAY;
     }
-  }, [spinning]);
+  }, [spinning, onGameStateChange]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -139,8 +256,9 @@ export default function SlotCanvas({
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Animated lava veins at bottom
       const t = timeRef.current;
+
+      // Lava veins
       for (let i = 0; i < 3; i++) {
         const veinY = CANVAS_H - 15 + Math.sin(t * 0.008 + i * 2) * 8;
         const veinGrad = ctx.createLinearGradient(0, veinY - 5, 0, veinY + 5);
@@ -151,7 +269,7 @@ export default function SlotCanvas({
         ctx.fillRect(0, veinY - 5, CANVAS_W, 10);
       }
 
-      // Lava glow from bottom — more intense pulsing
+      // Lava glow
       const lavaBreath = Math.sin(t * 0.018) * 0.5 + 0.5;
       const lavaGlow = ctx.createLinearGradient(0, CANVAS_H * 0.5, 0, CANVAS_H);
       lavaGlow.addColorStop(0, "rgba(255,40,0,0)");
@@ -161,7 +279,18 @@ export default function SlotCanvas({
       ctx.fillStyle = lavaGlow;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Deep vignette
+      // Free spins mode tint
+      if (gameStateRef.current.mode === "freespins") {
+        const fsTint = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+        const fsPulse = 0.5 + Math.sin(t * 0.03) * 0.3;
+        fsTint.addColorStop(0, `rgba(100,0,200,${0.03 + fsPulse * 0.02})`);
+        fsTint.addColorStop(0.5, `rgba(150,0,255,${0.05 + fsPulse * 0.03})`);
+        fsTint.addColorStop(1, `rgba(80,0,180,${0.03 + fsPulse * 0.02})`);
+        ctx.fillStyle = fsTint;
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      }
+
+      // Vignette
       const vignette = ctx.createRadialGradient(
         CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.18,
         CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.85
@@ -172,11 +301,8 @@ export default function SlotCanvas({
       ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // ── ANIMATED DRAGON SILHOUETTE ──
+      // ── DRAGON SILHOUETTE ──
       const dragonBreath = 0.5 + Math.sin(t * 0.012) * 0.5;
-      const dragonBreath2 = 0.5 + Math.sin(t * 0.02 + 1) * 0.5;
-
-      // Dragon body glow — pulsing warmth behind reels
       const dragonGlow = ctx.createRadialGradient(
         CANVAS_W / 2, CANVAS_H * 0.4 + Math.sin(t * 0.008) * 3, 0,
         CANVAS_W / 2, CANVAS_H * 0.4, CANVAS_W * 0.5
@@ -188,7 +314,7 @@ export default function SlotCanvas({
       ctx.fillStyle = dragonGlow;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Dragon wing shadows — subtle triangular forms
+      // Wings
       ctx.save();
       ctx.globalAlpha = 0.03 + dragonBreath * 0.02;
       for (const side of [-1, 1]) {
@@ -202,27 +328,23 @@ export default function SlotCanvas({
         );
         ctx.lineTo(CANVAS_W / 2, CANVAS_H * 0.5);
         ctx.closePath();
-        ctx.fillStyle = `rgba(200, 30, 0, 1)`;
+        ctx.fillStyle = "rgba(200, 30, 0, 1)";
         ctx.fill();
       }
       ctx.restore();
 
-      // Dragon eyes — more alive with flicker
+      // Dragon eyes
       const eyeIntensity = 0.1 + dragonBreath * 0.1 + Math.sin(t * 0.1) * 0.02;
-      const eyeSize = 10 + dragonBreath2 * 3;
+      const eyeSize = 10 + (0.5 + Math.sin(t * 0.02 + 1) * 0.5) * 3;
       for (const side of [-1, 1]) {
         const ex = CANVAS_W / 2 + side * CANVAS_W * 0.11;
         const ey = HEADER_H * 0.45 + Math.sin(t * 0.008 + side) * 1.5;
-
-        // Outer halo
         const halo = ctx.createRadialGradient(ex, ey, 0, ex, ey, eyeSize * 2.5);
         halo.addColorStop(0, `rgba(255, 200, 0, ${eyeIntensity * 0.6})`);
         halo.addColorStop(0.4, `rgba(255, 120, 0, ${eyeIntensity * 0.3})`);
         halo.addColorStop(1, "rgba(255, 50, 0, 0)");
         ctx.fillStyle = halo;
         ctx.fillRect(ex - eyeSize * 3, ey - eyeSize * 3, eyeSize * 6, eyeSize * 6);
-
-        // Core eye
         const eyeGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, eyeSize * 0.8);
         eyeGrad.addColorStop(0, `rgba(255, 255, 100, ${eyeIntensity * 1.5})`);
         eyeGrad.addColorStop(0.5, `rgba(255, 180, 0, ${eyeIntensity})`);
@@ -233,28 +355,11 @@ export default function SlotCanvas({
         ctx.fill();
       }
 
-      // Dragon breath smoke — subtle wisps above reels
-      ctx.save();
-      ctx.globalAlpha = 0.025 + dragonBreath * 0.015;
-      for (let i = 0; i < 3; i++) {
-        const bx = CANVAS_W / 2 + Math.sin(t * 0.006 + i * 2) * 40;
-        const by = HEADER_H * 0.7 + i * 8;
-        const bSize = 20 + i * 10;
-        const breathGrad = ctx.createRadialGradient(bx, by, 0, bx, by, bSize);
-        breathGrad.addColorStop(0, "rgba(255,100,0,1)");
-        breathGrad.addColorStop(1, "rgba(255,50,0,0)");
-        ctx.fillStyle = breathGrad;
-        ctx.fillRect(bx - bSize, by - bSize, bSize * 2, bSize * 2);
-      }
-      ctx.restore();
-
-      // Floating embers
+      // Embers
       ambientRef.current = updateAmbientParticles(ambientRef.current, t, CANVAS_H);
-      for (const p of ambientRef.current) {
-        drawAmbientParticle(ctx, p, t);
-      }
+      for (const p of ambientRef.current) drawAmbientParticle(ctx, p, t);
 
-      // Light sweep — warm volcanic
+      // Light sweep
       lightSweepRef.current = (lightSweepRef.current + 0.0015) % 1;
       const sweepX = lightSweepRef.current * (CANVAS_W + 400) - 200;
       const sweepGrad = ctx.createLinearGradient(sweepX - 130, 0, sweepX + 130, 0);
@@ -266,7 +371,7 @@ export default function SlotCanvas({
       ctx.fillStyle = sweepGrad;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Frame border — molten gold with animated glow
+      // Frame border
       ctx.save();
       const frameGlowIntensity = 0.4 + Math.sin(t * 0.015) * 0.1;
       ctx.shadowColor = `rgba(255,100,0,${frameGlowIntensity})`;
@@ -290,10 +395,35 @@ export default function SlotCanvas({
 
       // ── REELS ──
       const reelAreaY = HEADER_H + FRAME_PAD;
+
+      // Handle tumble phases
+      if (tumbleActiveRef.current) {
+        const elapsed = now - tumbleTimerRef.current;
+        if (tumblePhaseRef.current === "removing") {
+          removeFadeRef.current = Math.min(elapsed / TUMBLE_DELAY, 1);
+          if (removeFadeRef.current >= 1) {
+            // Apply tumble
+            const newGrid = tumbleGrid(gridRef.current, removingCellsRef.current);
+            gridRef.current = newGrid;
+            tumblePhaseRef.current = "falling";
+            tumbleTimerRef.current = now;
+            fallProgressRef.current = 0;
+          }
+        } else if (tumblePhaseRef.current === "falling") {
+          fallProgressRef.current = Math.min(elapsed / TUMBLE_FALL_DURATION, 1);
+          if (fallProgressRef.current >= 1) {
+            tumblePhaseRef.current = "evaluating";
+            removingCellsRef.current = new Set();
+            // Re-evaluate
+            startTumbleEvaluation();
+          }
+        }
+      }
+
       for (let r = 0; r < NUM_REELS; r++) {
         const rx = FRAME_PAD + r * (REEL_W + REEL_GAP);
 
-        // Reel background — dark with warm undertone
+        // Reel background
         const reelBg = ctx.createLinearGradient(rx, reelAreaY, rx, reelAreaY + VISIBLE_H);
         reelBg.addColorStop(0, "rgba(15,5,2,0.6)");
         reelBg.addColorStop(0.5, "rgba(10,3,1,0.5)");
@@ -311,7 +441,6 @@ export default function SlotCanvas({
         ctx.fillStyle = innerShadow;
         ctx.fillRect(rx, reelAreaY, REEL_W, VISIBLE_H);
 
-        // Reel border
         ctx.strokeStyle = "rgba(255,150,50,0.08)";
         ctx.lineWidth = 1;
         roundRect(ctx, rx, reelAreaY, REEL_W, VISIBLE_H, 8);
@@ -340,32 +469,22 @@ export default function SlotCanvas({
           const totalHeight = strip.length * CELL_H;
           const offset = Math.min(eased, 1.0) * (totalHeight - VISIBLE_H);
 
-          // Heavy motion blur
+          // Motion blur
           const spinSpeed = progress < 0.65 ? Math.sin((progress / 0.65) * Math.PI) : 0;
-            if (progress > 0.02 && progress < 0.65) {
+          if (progress > 0.02 && progress < 0.65) {
             ctx.filter = `blur(${spinSpeed * 7}px)`;
-            // Fire speed lines — denser
             ctx.fillStyle = `rgba(255, 100, 0, ${spinSpeed * 0.08})`;
             for (let sl = 0; sl < 7; sl++) {
               const slx = rx + REEL_PADDING + Math.random() * (REEL_W - REEL_PADDING * 2);
               ctx.fillRect(slx, reelAreaY, 1.5 + Math.random(), VISIBLE_H);
             }
-            // Hot white streak
-            ctx.fillStyle = `rgba(255, 200, 100, ${spinSpeed * 0.04})`;
-            const hotX = rx + REEL_W * 0.3 + Math.random() * REEL_W * 0.4;
-            ctx.fillRect(hotX, reelAreaY, 2, VISIBLE_H);
           }
 
           for (let i = 0; i < strip.length; i++) {
             const sy = i * CELL_H - offset;
             if (sy > -CELL_H && sy < VISIBLE_H + CELL_H) {
               const symCanvas = getSymbolCanvas(strip[i], SYMBOL_RENDER_SIZE);
-              ctx.drawImage(
-                symCanvas,
-                rx + REEL_PADDING,
-                reelAreaY + sy + (CELL_H - SYMBOL_SIZE) / 2,
-                SYMBOL_SIZE, SYMBOL_SIZE
-              );
+              ctx.drawImage(symCanvas, rx + REEL_PADDING, reelAreaY + sy + (CELL_H - SYMBOL_SIZE) / 2, SYMBOL_SIZE, SYMBOL_SIZE);
             }
           }
           ctx.filter = "none";
@@ -381,34 +500,8 @@ export default function SlotCanvas({
 
             if (reelStoppedRef.current.every(Boolean)) {
               spinActiveRef.current = false;
-              const wins = evaluateWins(targetGridRef.current, bet);
-              winResultsRef.current = wins;
-              const totalWin = wins.reduce((s, w) => s + w.payout, 0);
-
-              if (totalWin > 0) {
-                winFlashRef.current = 100;
-                for (const w of wins) {
-                  for (let wr = 0; wr < w.count; wr++) {
-                    const px = FRAME_PAD + wr * (REEL_W + REEL_GAP) + REEL_W / 2;
-                    const py = reelAreaY + w.positions[wr] * CELL_H + CELL_H / 2;
-                    particlesRef.current.push(
-                      ...createWinParticles(px, py, 35, w.symbol.color)
-                    );
-                    bounceRef.current.set(`${wr}_${w.positions[wr]}`, 0);
-                  }
-                }
-
-                if (totalWin >= bet * 10) {
-                  shakeRef.current = { active: true, intensity: 16, duration: 45, elapsed: 0 };
-                } else if (totalWin >= bet * 3) {
-                  shakeRef.current = { active: true, intensity: 7, duration: 25, elapsed: 0 };
-                } else {
-                  shakeRef.current = { active: true, intensity: 2.5, duration: 12, elapsed: 0 };
-                }
-
-                onWin(totalWin, totalWin >= bet * 20);
-              }
-              onSpinEnd();
+              // Start tumble evaluation
+              startTumbleEvaluation();
             }
           }
         } else {
@@ -419,8 +512,8 @@ export default function SlotCanvas({
             const bp = reelBounceRef.current[r];
             reelBounceRef.current[r]++;
             if (bp < BOUNCE_DURATION) {
-              const t = bp / BOUNCE_DURATION;
-              reelBounceOff = Math.sin(t * Math.PI * 3.5) * (1 - t) * 14;
+              const bt = bp / BOUNCE_DURATION;
+              reelBounceOff = Math.sin(bt * Math.PI * 3.5) * (1 - bt) * 14;
             } else {
               reelBounceRef.current[r] = -1;
             }
@@ -429,17 +522,29 @@ export default function SlotCanvas({
           for (let row = 0; row < NUM_ROWS; row++) {
             const sy = row * CELL_H;
             const sym = currentGrid[row];
-            const bounceKey = `${r}_${row}`;
+            const cellKey = `${r}_${row}`;
             let symbolBounce = 0;
 
-            if (bounceRef.current.has(bounceKey)) {
-              const bp = bounceRef.current.get(bounceKey)!;
-              bounceRef.current.set(bounceKey, bp + 1);
+            if (bounceRef.current.has(cellKey)) {
+              const bp = bounceRef.current.get(cellKey)!;
+              bounceRef.current.set(cellKey, bp + 1);
               if (bp < 40) {
-                const t = bp / 40;
-                symbolBounce = Math.sin(t * Math.PI * 3.5) * (1 - t) * -18;
+                const bt = bp / 40;
+                symbolBounce = Math.sin(bt * Math.PI * 3.5) * (1 - bt) * -18;
               } else {
-                bounceRef.current.delete(bounceKey);
+                bounceRef.current.delete(cellKey);
+              }
+            }
+
+            // During tumble removal phase, fade out winning cells
+            let cellAlpha = 1;
+            if (tumblePhaseRef.current === "removing" && removingCellsRef.current.has(cellKey)) {
+              cellAlpha = 1 - removeFadeRef.current;
+              // Explosion particles at removal
+              if (removeFadeRef.current > 0.4 && removeFadeRef.current < 0.5) {
+                const px = rx + REEL_W / 2;
+                const py = reelAreaY + sy + CELL_H / 2;
+                particlesRef.current.push(...createWinParticles(px, py, 8, sym.color));
               }
             }
 
@@ -453,29 +558,45 @@ export default function SlotCanvas({
               drawWinHighlight(
                 ctx, rx, reelAreaY + sy, REEL_W, CELL_H - GAP,
                 winSym?.symbol.color ?? "#FF4400",
-                winFlashRef.current / 100
+                winFlashRef.current / 80
               );
+            }
+
+            // Sticky wild glow during free spins
+            if (stickyWildsRef.current.has(cellKey) && gameStateRef.current.mode === "freespins") {
+              const stickyPulse = 0.5 + Math.sin(t * 0.08) * 0.3;
+              const stickyGlow = ctx.createRadialGradient(
+                rx + REEL_W / 2, reelAreaY + sy + CELL_H / 2, 0,
+                rx + REEL_W / 2, reelAreaY + sy + CELL_H / 2, SYMBOL_SIZE * 0.7
+              );
+              stickyGlow.addColorStop(0, `rgba(255,150,0,${stickyPulse * 0.2})`);
+              stickyGlow.addColorStop(1, "rgba(255,80,0,0)");
+              ctx.fillStyle = stickyGlow;
+              ctx.fillRect(rx, reelAreaY + sy, REEL_W, CELL_H);
             }
 
             const symCanvas = getSymbolCanvas(sym, SYMBOL_RENDER_SIZE);
             const scale = isWinning && winFlashRef.current > 0
-              ? 1 + Math.sin((winFlashRef.current / 100) * Math.PI * 3) * 0.08
+              ? 1 + Math.sin((winFlashRef.current / 80) * Math.PI * 3) * 0.08
               : 1;
             const drawSize = SYMBOL_SIZE * scale;
             const drawOffset = (SYMBOL_SIZE - drawSize) / 2;
 
+            ctx.save();
+            ctx.globalAlpha = cellAlpha;
             ctx.drawImage(
               symCanvas,
               rx + REEL_PADDING + drawOffset,
               reelAreaY + sy + (CELL_H - SYMBOL_SIZE) / 2 + symbolBounce + reelBounceOff + drawOffset,
               drawSize, drawSize
             );
+            ctx.restore();
           }
         }
 
         ctx.restore();
 
-        // Fade masks — dark volcanic color
+        // Fade masks
         const fadeH = 20;
         const topFade = ctx.createLinearGradient(0, reelAreaY, 0, reelAreaY + fadeH);
         topFade.addColorStop(0, "#0a0506");
@@ -500,12 +621,11 @@ export default function SlotCanvas({
       ctx.fillStyle = lavaUnder;
       ctx.fillRect(FRAME_PAD, lavaY, CANVAS_W - FRAME_PAD * 2, 25);
 
-      // Win paylines — fire colored
+      // Win paylines
       if (winFlashRef.current > 0) {
         winFlashRef.current--;
         for (const w of winResultsRef.current) {
           const dashOffset = timeRef.current * 2.5;
-          // Outer glow line
           ctx.shadowColor = w.symbol.color;
           ctx.shadowBlur = 10;
           ctx.strokeStyle = w.symbol.color + "60";
@@ -519,8 +639,6 @@ export default function SlotCanvas({
           }
           ctx.stroke();
           ctx.shadowBlur = 0;
-
-          // Inner dashed line
           ctx.strokeStyle = "#FFD700CC";
           ctx.lineWidth = 2.5;
           ctx.setLineDash([6, 4]);
@@ -534,6 +652,33 @@ export default function SlotCanvas({
           ctx.stroke();
           ctx.setLineDash([]);
         }
+      }
+
+      // Multiplier display during free spins
+      if (gameStateRef.current.mode === "freespins" && gameStateRef.current.tumbleCount > 0) {
+        const mult = getTumbleMultiplier(gameStateRef.current.tumbleCount, true);
+        const multPulse = 0.8 + Math.sin(t * 0.1) * 0.2;
+        ctx.save();
+        ctx.globalAlpha = multPulse;
+        const mx = CANVAS_W - FRAME_PAD - 5;
+        const my = reelAreaY + 5;
+        // Badge background
+        const badgeGrad = ctx.createRadialGradient(mx - 25, my + 15, 0, mx - 25, my + 15, 30);
+        badgeGrad.addColorStop(0, "rgba(255,200,0,0.3)");
+        badgeGrad.addColorStop(1, "rgba(255,100,0,0.1)");
+        ctx.fillStyle = badgeGrad;
+        roundRect(ctx, mx - 50, my, 50, 30, 6);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,200,0,0.5)";
+        ctx.lineWidth = 1;
+        roundRect(ctx, mx - 50, my, 50, 30, 6);
+        ctx.stroke();
+        // Multiplier text as geometric shapes
+        ctx.fillStyle = "#FFD700";
+        ctx.font = "bold 14px Orbitron, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(`x${mult}`, mx - 25, my + 20);
+        ctx.restore();
       }
 
       // Particles
@@ -551,7 +696,7 @@ export default function SlotCanvas({
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Payline arrows — gold/fire
+      // Payline arrows
       for (const side of [-1, 1]) {
         const ax = side === -1 ? FRAME_PAD - 8 : CANVAS_W - FRAME_PAD + 8;
         ctx.fillStyle = "rgba(255,180,0,0.3)";
@@ -575,7 +720,7 @@ export default function SlotCanvas({
 
     animFrameRef.current = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [bet, onWin, onSpinEnd, spinning]);
+  }, [bet, onWin, onSpinEnd, spinning, startTumbleEvaluation]);
 
   return (
     <canvas
