@@ -32,6 +32,11 @@ const Navbar = () => {
                 src={reelbitLogo}
                 alt="ReelBit Logo"
                 className="relative h-9 w-9 rounded-lg object-cover"
+                width={36}
+                height={36}
+                loading="eager"
+                decoding="async"
+                fetchPriority="high"
               />
             </div>
             <span className="font-orbitron font-bold text-xl tracking-wide">
