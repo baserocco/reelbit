@@ -5,6 +5,11 @@ import {
   createInitialGameState, getFreespinsCount,
   type GameState,
 } from "./slot/SlotEngine";
+import {
+  playSpin, playWin, playBigWin, playSuperWin,
+  playFreeSpinsTrigger, playBuyFeature, playClick,
+  setMuted, isMuted,
+} from "./slot/SoundManager";
 
 const BET_OPTIONS = [1, 5, 10, 25, 50];
 
@@ -227,6 +232,7 @@ const SlotDemoSection = () => {
   const [gameState, setGameState] = useState<GameState>(createInitialGameState());
   const [bigWinOverlay, setBigWinOverlay] = useState<{ amount: number; tier: string } | null>(null);
   const [freeSpinsIntro, setFreeSpinsIntro] = useState<number | null>(null);
+  const [soundOn, setSoundOn] = useState(true);
   const autoSpinRef = useRef<NodeJS.Timeout>();
 
   const handleSpin = useCallback(() => {
@@ -239,6 +245,7 @@ const SlotDemoSection = () => {
     setIsJackpot(false);
     setShowFireRain(false);
     setSpinning(true);
+    playSpin();
   }, [spinning, balance, bet, gameState.mode]);
 
   const handleSpinEnd = useCallback(() => {
@@ -250,12 +257,15 @@ const SlotDemoSection = () => {
         setBigWinOverlay({ amount: prev, tier: "SUPER WIN" });
         setShowFireRain(true);
         setTimeout(() => setShowFireRain(false), 5000);
+        playSuperWin();
       } else if (prev >= bet * 20) {
         setBigWinOverlay({ amount: prev, tier: "MEGA WIN" });
         setShowFireRain(true);
         setTimeout(() => setShowFireRain(false), 4000);
+        playSuperWin();
       } else if (prev >= bet * 10) {
         setBigWinOverlay({ amount: prev, tier: "BIG WIN" });
+        playBigWin();
       }
       return prev;
     });
@@ -278,6 +288,7 @@ const SlotDemoSection = () => {
     setLastWin(amount);
     setTotalSpinWin(prev => prev + amount);
     setIsJackpot(amount >= bet * 20);
+    playWin();
   }, [bet]);
 
   const handleWin = useCallback((amount: number, jackpot: boolean) => {
@@ -288,6 +299,7 @@ const SlotDemoSection = () => {
 
   const handleFreeSpinsTrigger = useCallback((count: number) => {
     setFreeSpinsIntro(count);
+    playFreeSpinsTrigger();
   }, []);
 
   const startFreeSpins = useCallback((count: number) => {
@@ -305,7 +317,14 @@ const SlotDemoSection = () => {
     if (balance < cost || spinning) return;
     setBalance(b => b - cost);
     setFreeSpinsIntro(10);
+    playBuyFeature();
   }, [bet, balance, spinning]);
+
+  const toggleSound = useCallback(() => {
+    const newState = !soundOn;
+    setSoundOn(newState);
+    setMuted(!newState);
+  }, [soundOn]);
 
   useEffect(() => {
     if (autoSpin && !spinning && !bigWinOverlay && !freeSpinsIntro) {
@@ -447,6 +466,30 @@ const SlotDemoSection = () => {
                   <span className="font-orbitron font-bold text-sm tracking-wider" style={{ color: "#FFD700" }}>DRAGON'S INFERNO</span>
                 </div>
                 <div className="flex items-center gap-3">
+                  <button
+                    onClick={toggleSound}
+                    className="w-7 h-7 flex items-center justify-center rounded-md transition-all"
+                    style={{
+                      background: "rgba(255,255,255,0.05)",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      color: soundOn ? "#FFD700" : "rgba(255,255,255,0.25)",
+                    }}
+                    title={soundOn ? "Mute" : "Unmute"}
+                  >
+                    {soundOn ? (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                      </svg>
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                        <line x1="23" y1="9" x2="17" y2="15" />
+                        <line x1="17" y1="9" x2="23" y2="15" />
+                      </svg>
+                    )}
+                  </button>
                   <span className="text-muted-foreground text-xs font-inter">20 Paylines</span>
                   <span className="text-muted-foreground text-xs font-inter">Tumble</span>
                   <span className="text-xs font-inter px-2 py-0.5 rounded" style={{

@@ -168,7 +168,7 @@ serve(async (req) => {
               <p style="color:#aaa;line-height:1.6;">
                 Click the button below to confirm your email and secure your spot on the ReelBit waitlist.
               </p>
-              <a href="${confirmUrl}" style="display:inline-block;background:linear-gradient(135deg,#00F5FF,#0088CC);color:#000;font-weight:bold;padding:14px 32px;border-radius:8px;text-decoration:none;margin:20px 0;font-size:16px;">
+              <a href="${confirmUrl}" style="display:inline-block;background-color:#00C8DD;background:linear-gradient(135deg,#00F5FF,#0088CC);color:#000;font-weight:bold;padding:14px 32px;border-radius:8px;text-decoration:none;margin:20px 0;font-size:16px;">
                 Confirm My Spot
               </a>
               <p style="color:#666;font-size:12px;margin-top:20px;">

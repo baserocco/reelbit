@@ -19,6 +19,7 @@ import {
   type Particle, type AmbientParticle, type ShakeState,
 } from "./AnimationManager";
 import { getSymbolCanvas, drawDragonAnimatedOverlay } from "./SymbolRenderer";
+import { playReelStop, playLastReelStop, playAnticipation, playTumble, playSymbolRemove } from "./SoundManager";
 
 // Layout
 const REEL_PADDING = 6;
@@ -152,6 +153,7 @@ export default function SlotCanvas({
       removeFadeRef.current = 0;
       tumbleTimerRef.current = performance.now();
       tumbleActiveRef.current = true;
+      playSymbolRemove();
 
       // Update tumble count
       const newGs = { ...gs, tumbleCount: gs.tumbleCount + 1 };
@@ -408,6 +410,7 @@ export default function SlotCanvas({
             tumblePhaseRef.current = "falling";
             tumbleTimerRef.current = now;
             fallProgressRef.current = 0;
+            playTumble();
           }
         } else if (tumblePhaseRef.current === "falling") {
           fallProgressRef.current = Math.min(elapsed / TUMBLE_FALL_DURATION, 1);
@@ -494,8 +497,17 @@ export default function SlotCanvas({
             reelBounceRef.current[r] = 0;
             gridRef.current[r] = targetGridRef.current[r];
 
+            // Play reel stop sound
+            if (r === NUM_REELS - 1) {
+              playLastReelStop();
+            } else {
+              playReelStop(r);
+            }
+
             if (r === 3) {
-              anticipateRef.current = shouldAnticipate(targetGridRef.current, 4);
+              const shouldAnt = shouldAnticipate(targetGridRef.current, 4);
+              anticipateRef.current = shouldAnt;
+              if (shouldAnt) playAnticipation();
             }
 
             if (reelStoppedRef.current.every(Boolean)) {
