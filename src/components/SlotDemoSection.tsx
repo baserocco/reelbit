@@ -437,9 +437,11 @@ const SlotDemoSection = () => {
                   <div className="w-7 h-7 rounded overflow-hidden flex-shrink-0" style={{
                     filter: "drop-shadow(0 0 6px rgba(255,80,0,0.6))",
                   }}>
-                    <img src="/images/dragons-sheet.png" alt="Dragon's Inferno" className="h-full w-auto max-w-none" style={{
-                      /* Show only the left (fire dragon) half */
-                      transform: "scale(1.15)",
+                    <img src="/images/dragons-sheet.png" alt="Dragon's Inferno" className="h-full max-w-none" style={{
+                      /* Show only the left (fire dragon) half by doubling width and hiding overflow */
+                      width: "200%",
+                      objectFit: "cover",
+                      objectPosition: "left center",
                     }} />
                   </div>
                   <span className="font-orbitron font-bold text-sm tracking-wider" style={{ color: "#FFD700" }}>DRAGON'S INFERNO</span>
