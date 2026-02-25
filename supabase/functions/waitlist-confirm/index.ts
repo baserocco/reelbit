@@ -52,7 +52,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: "ReelBit <onboarding@resend.dev>",
+          from: "ReelBit <noreply@reelbit.fun>",
           to: [data.email],
           subject: "You're in! Welcome to ReelBit 🎰🚀",
           html: `
