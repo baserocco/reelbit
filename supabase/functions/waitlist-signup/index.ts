@@ -7,11 +7,14 @@ const allowedOrigins = [
   "https://id-preview--6c4ba71d-52e1-44c0-8e47-6f68383e1d33.lovable.app",
 ];
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const baseCorsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+function getCorsHeaders(origin: string) {
+  return { ...baseCorsHeaders, "Access-Control-Allow-Origin": origin };
+}
 
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
@@ -28,19 +31,22 @@ function checkRateLimit(identifier: string, maxRequests: number, windowMs: numbe
 }
 
 serve(async (req) => {
+  // Origin validation (needed for both OPTIONS and actual requests)
+  const origin = req.headers.get("origin");
+  if (!origin || !allowedOrigins.includes(origin)) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized" }),
+      { status: 403, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Origin validation
-    const origin = req.headers.get("origin");
-    if (!origin || !allowedOrigins.includes(origin)) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     // Rate limiting: 3 requests per IP per 5 minutes
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
@@ -79,7 +85,13 @@ serve(async (req) => {
       }
       sanitizedWallet = walletStr;
     }
-    const sanitizedRef = ref ? String(ref).slice(0, 20) : null;
+    let sanitizedRef: string | null = null;
+    if (ref) {
+      const refStr = String(ref).trim();
+      if (/^[a-f0-9]{8}$/i.test(refStr)) {
+        sanitizedRef = refStr;
+      }
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
