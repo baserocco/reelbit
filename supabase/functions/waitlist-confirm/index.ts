@@ -35,7 +35,7 @@ serve(async (req) => {
   try {
     // Origin validation
     const origin = req.headers.get("origin");
-    if (origin && !allowedOrigins.includes(origin)) {
+    if (!origin || !allowedOrigins.includes(origin)) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -56,6 +56,15 @@ serve(async (req) => {
     if (!token) {
       return new Response(
         JSON.stringify({ error: "Invalid or missing token" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(token)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid token format" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -159,7 +168,7 @@ serve(async (req) => {
             </div>
           `,
         }),
-      }).catch(console.error);
+      }).catch((e: unknown) => console.error("Email send failed:", e instanceof Error ? e.message : "Unknown error"));
     }
 
     return new Response(
@@ -173,7 +182,7 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Confirmation error:", error);
+    console.error("Confirmation error:", error instanceof Error ? error.message : "Unknown error");
     return new Response(
       JSON.stringify({ error: "Something went wrong. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -35,7 +35,7 @@ serve(async (req) => {
   try {
     // Origin validation
     const origin = req.headers.get("origin");
-    if (origin && !allowedOrigins.includes(origin)) {
+    if (!origin || !allowedOrigins.includes(origin)) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -138,7 +138,7 @@ serve(async (req) => {
         .single();
 
       if (error) {
-        console.error("DB insert error:", error);
+        console.error("DB insert failed:", { code: error.code, hint: error.hint });
         throw new Error("Failed to save signup");
       }
       confirmationToken = data.confirmation_token;
@@ -184,8 +184,7 @@ serve(async (req) => {
     });
 
     if (!emailResponse.ok) {
-      const errorData = await emailResponse.text();
-      console.error("Resend error:", emailResponse.status, errorData);
+      console.error("Resend error:", emailResponse.status);
       return new Response(
         JSON.stringify({ 
           success: true, 
@@ -201,7 +200,7 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Waitlist signup error:", error);
+    console.error("Waitlist signup error:", error instanceof Error ? error.message : "Unknown error");
     return new Response(
       JSON.stringify({ error: "Something went wrong. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
