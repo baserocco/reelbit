@@ -131,89 +131,158 @@ export default function SlotCanvas({
 
       // ── VOLCANIC BACKGROUND ──
       const bgGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-      bgGrad.addColorStop(0, "#0a0506");
-      bgGrad.addColorStop(0.3, "#120808");
-      bgGrad.addColorStop(0.7, "#1a0a04");
+      bgGrad.addColorStop(0, "#080305");
+      bgGrad.addColorStop(0.25, "#100606");
+      bgGrad.addColorStop(0.5, "#150804");
+      bgGrad.addColorStop(0.75, "#1a0a04");
       bgGrad.addColorStop(1, "#0d0402");
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Lava glow from bottom
-      const lavaGlow = ctx.createLinearGradient(0, CANVAS_H * 0.6, 0, CANVAS_H);
-      lavaGlow.addColorStop(0, "rgba(255,60,0,0)");
-      lavaGlow.addColorStop(0.5, `rgba(255,50,0,${0.06 + Math.sin(timeRef.current * 0.02) * 0.03})`);
-      lavaGlow.addColorStop(1, `rgba(255,30,0,${0.12 + Math.sin(timeRef.current * 0.015) * 0.05})`);
+      // Animated lava veins at bottom
+      const t = timeRef.current;
+      for (let i = 0; i < 3; i++) {
+        const veinY = CANVAS_H - 15 + Math.sin(t * 0.008 + i * 2) * 8;
+        const veinGrad = ctx.createLinearGradient(0, veinY - 5, 0, veinY + 5);
+        veinGrad.addColorStop(0, "rgba(255,60,0,0)");
+        veinGrad.addColorStop(0.5, `rgba(255,${50 + i * 20},0,${0.06 + Math.sin(t * 0.02 + i) * 0.03})`);
+        veinGrad.addColorStop(1, "rgba(255,30,0,0)");
+        ctx.fillStyle = veinGrad;
+        ctx.fillRect(0, veinY - 5, CANVAS_W, 10);
+      }
+
+      // Lava glow from bottom — more intense pulsing
+      const lavaBreath = Math.sin(t * 0.018) * 0.5 + 0.5;
+      const lavaGlow = ctx.createLinearGradient(0, CANVAS_H * 0.5, 0, CANVAS_H);
+      lavaGlow.addColorStop(0, "rgba(255,40,0,0)");
+      lavaGlow.addColorStop(0.4, `rgba(255,50,0,${0.04 + lavaBreath * 0.04})`);
+      lavaGlow.addColorStop(0.7, `rgba(255,40,0,${0.08 + lavaBreath * 0.06})`);
+      lavaGlow.addColorStop(1, `rgba(255,25,0,${0.15 + lavaBreath * 0.08})`);
       ctx.fillStyle = lavaGlow;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Vignette
+      // Deep vignette
       const vignette = ctx.createRadialGradient(
-        CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.2,
-        CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.8
+        CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.18,
+        CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.85
       );
       vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(1, "rgba(0,0,0,0.45)");
+      vignette.addColorStop(0.6, "rgba(0,0,0,0.2)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.55)");
       ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Dragon silhouette — subtle breathing glow behind reels
-      const dragonBreath = 0.5 + Math.sin(timeRef.current * 0.015) * 0.5;
+      // ── ANIMATED DRAGON SILHOUETTE ──
+      const dragonBreath = 0.5 + Math.sin(t * 0.012) * 0.5;
+      const dragonBreath2 = 0.5 + Math.sin(t * 0.02 + 1) * 0.5;
+
+      // Dragon body glow — pulsing warmth behind reels
       const dragonGlow = ctx.createRadialGradient(
-        CANVAS_W / 2, CANVAS_H * 0.35, 0,
-        CANVAS_W / 2, CANVAS_H * 0.35, CANVAS_W * 0.45
+        CANVAS_W / 2, CANVAS_H * 0.4 + Math.sin(t * 0.008) * 3, 0,
+        CANVAS_W / 2, CANVAS_H * 0.4, CANVAS_W * 0.5
       );
-      dragonGlow.addColorStop(0, `rgba(200, 40, 0, ${0.08 + dragonBreath * 0.06})`);
-      dragonGlow.addColorStop(0.4, `rgba(150, 20, 0, ${0.04 + dragonBreath * 0.03})`);
-      dragonGlow.addColorStop(1, "rgba(100, 0, 0, 0)");
+      dragonGlow.addColorStop(0, `rgba(220, 50, 0, ${0.07 + dragonBreath * 0.06})`);
+      dragonGlow.addColorStop(0.3, `rgba(180, 30, 0, ${0.04 + dragonBreath * 0.03})`);
+      dragonGlow.addColorStop(0.6, `rgba(120, 15, 0, ${0.02 + dragonBreath * 0.015})`);
+      dragonGlow.addColorStop(1, "rgba(80, 0, 0, 0)");
       ctx.fillStyle = dragonGlow;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Dragon eye hints — two faint glowing dots above reels
-      const eyeAlpha = 0.08 + dragonBreath * 0.06;
+      // Dragon wing shadows — subtle triangular forms
+      ctx.save();
+      ctx.globalAlpha = 0.03 + dragonBreath * 0.02;
       for (const side of [-1, 1]) {
-        const ex = CANVAS_W / 2 + side * CANVAS_W * 0.12;
-        const ey = HEADER_H * 0.5;
-        const eyeGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, 8);
-        eyeGrad.addColorStop(0, `rgba(255, 200, 0, ${eyeAlpha})`);
-        eyeGrad.addColorStop(0.5, `rgba(255, 100, 0, ${eyeAlpha * 0.5})`);
-        eyeGrad.addColorStop(1, "rgba(255, 50, 0, 0)");
-        ctx.fillStyle = eyeGrad;
-        ctx.fillRect(ex - 12, ey - 12, 24, 24);
+        ctx.beginPath();
+        ctx.moveTo(CANVAS_W / 2, HEADER_H * 0.3);
+        ctx.quadraticCurveTo(
+          CANVAS_W / 2 + side * CANVAS_W * (0.35 + dragonBreath * 0.05),
+          CANVAS_H * 0.15,
+          CANVAS_W / 2 + side * CANVAS_W * 0.4,
+          CANVAS_H * 0.55
+        );
+        ctx.lineTo(CANVAS_W / 2, CANVAS_H * 0.5);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(200, 30, 0, 1)`;
+        ctx.fill();
       }
+      ctx.restore();
+
+      // Dragon eyes — more alive with flicker
+      const eyeIntensity = 0.1 + dragonBreath * 0.1 + Math.sin(t * 0.1) * 0.02;
+      const eyeSize = 10 + dragonBreath2 * 3;
+      for (const side of [-1, 1]) {
+        const ex = CANVAS_W / 2 + side * CANVAS_W * 0.11;
+        const ey = HEADER_H * 0.45 + Math.sin(t * 0.008 + side) * 1.5;
+
+        // Outer halo
+        const halo = ctx.createRadialGradient(ex, ey, 0, ex, ey, eyeSize * 2.5);
+        halo.addColorStop(0, `rgba(255, 200, 0, ${eyeIntensity * 0.6})`);
+        halo.addColorStop(0.4, `rgba(255, 120, 0, ${eyeIntensity * 0.3})`);
+        halo.addColorStop(1, "rgba(255, 50, 0, 0)");
+        ctx.fillStyle = halo;
+        ctx.fillRect(ex - eyeSize * 3, ey - eyeSize * 3, eyeSize * 6, eyeSize * 6);
+
+        // Core eye
+        const eyeGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, eyeSize * 0.8);
+        eyeGrad.addColorStop(0, `rgba(255, 255, 100, ${eyeIntensity * 1.5})`);
+        eyeGrad.addColorStop(0.5, `rgba(255, 180, 0, ${eyeIntensity})`);
+        eyeGrad.addColorStop(1, "rgba(255, 80, 0, 0)");
+        ctx.fillStyle = eyeGrad;
+        ctx.beginPath();
+        ctx.ellipse(ex, ey, eyeSize * 0.6, eyeSize * 0.35, side * 0.15, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Dragon breath smoke — subtle wisps above reels
+      ctx.save();
+      ctx.globalAlpha = 0.025 + dragonBreath * 0.015;
+      for (let i = 0; i < 3; i++) {
+        const bx = CANVAS_W / 2 + Math.sin(t * 0.006 + i * 2) * 40;
+        const by = HEADER_H * 0.7 + i * 8;
+        const bSize = 20 + i * 10;
+        const breathGrad = ctx.createRadialGradient(bx, by, 0, bx, by, bSize);
+        breathGrad.addColorStop(0, "rgba(255,100,0,1)");
+        breathGrad.addColorStop(1, "rgba(255,50,0,0)");
+        ctx.fillStyle = breathGrad;
+        ctx.fillRect(bx - bSize, by - bSize, bSize * 2, bSize * 2);
+      }
+      ctx.restore();
 
       // Floating embers
-      ambientRef.current = updateAmbientParticles(ambientRef.current, timeRef.current, CANVAS_H);
+      ambientRef.current = updateAmbientParticles(ambientRef.current, t, CANVAS_H);
       for (const p of ambientRef.current) {
-        drawAmbientParticle(ctx, p, timeRef.current);
+        drawAmbientParticle(ctx, p, t);
       }
 
-      // Light sweep — warm tones
-      lightSweepRef.current = (lightSweepRef.current + 0.002) % 1;
-      const sweepX = lightSweepRef.current * (CANVAS_W + 300) - 150;
-      const sweepGrad = ctx.createLinearGradient(sweepX - 100, 0, sweepX + 100, 0);
+      // Light sweep — warm volcanic
+      lightSweepRef.current = (lightSweepRef.current + 0.0015) % 1;
+      const sweepX = lightSweepRef.current * (CANVAS_W + 400) - 200;
+      const sweepGrad = ctx.createLinearGradient(sweepX - 130, 0, sweepX + 130, 0);
       sweepGrad.addColorStop(0, "rgba(255,200,100,0)");
-      sweepGrad.addColorStop(0.3, "rgba(255,150,50,0.015)");
-      sweepGrad.addColorStop(0.5, "rgba(255,200,100,0.04)");
-      sweepGrad.addColorStop(0.7, "rgba(255,150,50,0.015)");
+      sweepGrad.addColorStop(0.3, "rgba(255,150,50,0.012)");
+      sweepGrad.addColorStop(0.5, "rgba(255,220,120,0.04)");
+      sweepGrad.addColorStop(0.7, "rgba(255,150,50,0.012)");
       sweepGrad.addColorStop(1, "rgba(255,200,100,0)");
       ctx.fillStyle = sweepGrad;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Frame border — molten gold with fire glow
+      // Frame border — molten gold with animated glow
       ctx.save();
-      ctx.shadowColor = "rgba(255,100,0,0.5)";
-      ctx.shadowBlur = 18;
+      const frameGlowIntensity = 0.4 + Math.sin(t * 0.015) * 0.1;
+      ctx.shadowColor = `rgba(255,100,0,${frameGlowIntensity})`;
+      ctx.shadowBlur = 20 + Math.sin(t * 0.02) * 5;
       const frameGrad = ctx.createLinearGradient(0, 0, CANVAS_W, CANVAS_H);
       frameGrad.addColorStop(0, "rgba(255,180,0,0.4)");
-      frameGrad.addColorStop(0.3, "rgba(255,100,0,0.3)");
-      frameGrad.addColorStop(0.7, "rgba(255,180,0,0.35)");
-      frameGrad.addColorStop(1, "rgba(200,50,0,0.3)");
+      frameGrad.addColorStop(0.25, "rgba(255,100,0,0.3)");
+      frameGrad.addColorStop(0.5, "rgba(255,200,50,0.35)");
+      frameGrad.addColorStop(0.75, "rgba(255,100,0,0.3)");
+      frameGrad.addColorStop(1, "rgba(200,50,0,0.35)");
       ctx.strokeStyle = frameGrad;
       ctx.lineWidth = 2.5;
       roundRect(ctx, 1, 1, CANVAS_W - 2, CANVAS_H - 2, 16);
       ctx.stroke();
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = "rgba(255,200,100,0.06)";
+      ctx.strokeStyle = "rgba(255,200,100,0.05)";
       ctx.lineWidth = 1;
       roundRect(ctx, 3, 3, CANVAS_W - 6, CANVAS_H - 6, 14);
       ctx.stroke();

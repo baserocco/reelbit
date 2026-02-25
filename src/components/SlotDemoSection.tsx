@@ -43,27 +43,36 @@ const AnimatedCounter = ({ value, big }: { value: number; big: boolean }) => {
   );
 };
 
+/* Fire Rain — CSS animated falling particles (no emoji) */
 const FireRain = ({ active }: { active: boolean }) => {
   const items = useRef(
-    Array.from({ length: 40 }, (_, i) => ({
+    Array.from({ length: 35 }, (_, i) => ({
       id: i,
       left: `${Math.random() * 100}%`,
       delay: `${Math.random() * 1.5}s`,
       duration: `${1.2 + Math.random() * 1.5}s`,
-      size: 16 + Math.floor(Math.random() * 20),
-      emoji: ["🔥", "💰", "🐉", "⚔️", "💎"][Math.floor(Math.random() * 5)],
+      size: 4 + Math.floor(Math.random() * 8),
+      color: ["#FF4400", "#FF6600", "#FFD700", "#FFAA00", "#FF2200"][Math.floor(Math.random() * 5)],
+      blur: 2 + Math.random() * 6,
     }))
   );
   if (!active) return null;
   return (
     <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
       {items.current.map((c) => (
-        <div key={c.id} className="absolute top-0 select-none" style={{
-          left: c.left, fontSize: c.size,
-          animationName: "fireDrop", animationDuration: c.duration,
-          animationDelay: c.delay, animationTimingFunction: "linear",
-          animationIterationCount: "3", animationFillMode: "forwards",
-        }}>{c.emoji}</div>
+        <div key={c.id} className="absolute top-0 rounded-full" style={{
+          left: c.left,
+          width: c.size,
+          height: c.size,
+          backgroundColor: c.color,
+          boxShadow: `0 0 ${c.blur}px ${c.color}`,
+          animationName: "fireDrop",
+          animationDuration: c.duration,
+          animationDelay: c.delay,
+          animationTimingFunction: "linear",
+          animationIterationCount: "3",
+          animationFillMode: "forwards",
+        }} />
       ))}
     </div>
   );
@@ -122,7 +131,7 @@ const BondingCurveChart = ({ userCount }: { userCount: number }) => {
         </div>
         <div className="flex justify-between text-xs font-inter text-muted-foreground">
           <span>0 SOL</span>
-          <span>🐉 Graduation: 85 SOL</span>
+          <span>Graduation: 85 SOL</span>
         </div>
       </div>
     </div>
@@ -181,9 +190,9 @@ const SlotDemoSection = () => {
     <>
       <style>{`
         @keyframes fireDrop {
-          0% { transform: translateY(-60px) rotate(0deg); opacity: 1; }
-          80% { opacity: 1; }
-          100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+          0% { transform: translateY(-20px) scale(1); opacity: 1; }
+          70% { opacity: 0.8; }
+          100% { transform: translateY(100vh) scale(0.3); opacity: 0; }
         }
         @keyframes dragonPulse {
           0%, 100% { box-shadow: 0 0 30px rgba(255,80,0,0.2), inset 0 0 30px rgba(255,60,0,0.05); }
@@ -204,7 +213,7 @@ const SlotDemoSection = () => {
         <div className="relative max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <span className="inline-block font-orbitron text-xs tracking-widest uppercase font-semibold mb-4" style={{ color: "#FF6600" }}>
-              🐉 Live Demo
+              Live Demo
             </span>
             <h2 className="font-orbitron font-bold text-3xl sm:text-4xl lg:text-5xl text-foreground">
               Dragon's{" "}
@@ -251,7 +260,10 @@ const SlotDemoSection = () => {
                 borderBottom: "1px solid rgba(255,150,0,0.06)",
               }}>
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">🐉</span>
+                  <div className="w-5 h-5 rounded-full" style={{
+                    background: "radial-gradient(circle, #FF6600, #CC1100)",
+                    boxShadow: "0 0 8px rgba(255,80,0,0.5)",
+                  }} />
                   <span className="font-orbitron font-bold text-sm tracking-wider" style={{ color: "#FFD700" }}>DRAGON'S INFERNO</span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -283,7 +295,7 @@ const SlotDemoSection = () => {
                     <div key={sym.id} className="flex items-center gap-1 text-xs">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: sym.color, boxShadow: `0 0 6px ${sym.color}60` }} />
                       <span className="text-muted-foreground font-inter hidden sm:inline">{sym.name}</span>
-                      <span className="font-orbitron text-foreground font-bold">×{sym.multiplier}</span>
+                      <span className="font-orbitron text-foreground font-bold">{sym.multiplier}x</span>
                     </div>
                   ))}
                 </div>
@@ -308,7 +320,7 @@ const SlotDemoSection = () => {
                         <button
                           key={b}
                           onClick={() => setBet(b)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-orbitron font-bold transition-all`}
+                          className="px-3 py-1.5 rounded-lg text-xs font-orbitron font-bold transition-all"
                           style={{
                             background: bet === b ? "rgba(255,100,0,0.2)" : "rgba(255,255,255,0.03)",
                             border: bet === b ? "1px solid rgba(255,150,0,0.5)" : "1px solid rgba(255,255,255,0.08)",
@@ -339,7 +351,7 @@ const SlotDemoSection = () => {
                     }}
                   >
                     <span className="relative z-10">
-                      {spinning ? "⟳ Spinning..." : "🐉 SPIN"}
+                      {spinning ? "SPINNING..." : "SPIN"}
                     </span>
                     {!spinning && (
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
@@ -359,7 +371,7 @@ const SlotDemoSection = () => {
                 </div>
 
                 <p className="text-center text-muted-foreground text-xs font-inter mt-3">
-                  🔥 10 paylines · 3+ matching = win · 5-of-a-kind = DRAGON JACKPOT
+                  10 paylines · 3+ matching = win · 5-of-a-kind = DRAGON JACKPOT
                 </p>
               </div>
             </div>
@@ -410,7 +422,7 @@ const SlotDemoSection = () => {
                   WebkitTextFillColor: "transparent",
                   filter: "drop-shadow(0 0 8px rgba(255,150,0,0.3))",
                 }}>+2.84 SOL</div>
-                <div className="text-muted-foreground text-xs font-inter">Last 24 hours · ~$412 USD</div>
+                <div className="text-muted-foreground text-xs font-inter">Last 24 hours</div>
               </div>
             </div>
           </div>
