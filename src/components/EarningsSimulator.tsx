@@ -2,9 +2,10 @@ import { useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
 const PIE_DATA = [
-  { name: "Creator", value: 45, color: "#00F5FF" },
-  { name: "Shareholders", value: 35, color: "#FF00AA" },
-  { name: "Platform", value: 20, color: "#FFD700" },
+  { name: "Creator", value: 30, color: "#00F5FF" },
+  { name: "Slot Treasury (Wins)", value: 30, color: "#FF00AA" },
+  { name: "Shareholders", value: 20, color: "#FFD700" },
+  { name: "Platform", value: 20, color: "#9945FF" },
 ];
 
 const CustomTooltip = ({ active, payload }: any) => {
@@ -25,8 +26,9 @@ const EarningsSimulator = () => {
 
   const totalWagered = dailySpins * avgBet;
   const totalRevenue = totalWagered * 0.04; // 4% house edge
-  const creatorMonthly = totalRevenue * 0.45 * 30;
-  const shareholderMonthly = totalRevenue * 0.35 * 30;
+  const creatorMonthly = totalRevenue * 0.30 * 30;
+  const treasuryMonthly = totalRevenue * 0.30 * 30;
+  const shareholderMonthly = totalRevenue * 0.20 * 30;
   const platformMonthly = totalRevenue * 0.20 * 30;
 
   return (
@@ -113,8 +115,9 @@ const EarningsSimulator = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
                 { label: "Creator Monthly", value: `$${creatorMonthly.toFixed(0)}`, color: "#00F5FF", sub: "Your passive income" },
-                { label: "Shareholders", value: `$${shareholderMonthly.toFixed(0)}`, color: "#FF00AA", sub: "Investor dividends" },
-                { label: "Daily Wagered", value: `$${totalWagered.toFixed(0)}`, color: "#FFD700", sub: "Total volume" },
+                { label: "Slot Treasury", value: `$${treasuryMonthly.toFixed(0)}`, color: "#FF00AA", sub: "Player win pool" },
+                { label: "Shareholders", value: `$${shareholderMonthly.toFixed(0)}`, color: "#FFD700", sub: "Investor dividends" },
+                { label: "Daily Wagered", value: `$${totalWagered.toFixed(0)}`, color: "#9945FF", sub: "Total volume" },
               ].map((item) => (
                 <div
                   key={item.label}
