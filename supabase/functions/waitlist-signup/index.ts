@@ -122,9 +122,10 @@ serve(async (req) => {
       .maybeSingle();
 
     if (existing?.confirmed) {
-      // Return same success message to prevent email enumeration
+      // Add artificial delay to match email-send timing and prevent enumeration
+      await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300));
       return new Response(
-        JSON.stringify({ success: true, message: "Check your email to confirm your spot!", emailSent: false }),
+        JSON.stringify({ success: true, message: "Check your email to confirm your spot!" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -135,7 +136,7 @@ serve(async (req) => {
       const newToken = crypto.randomUUID();
       await supabase
         .from("waitlist_signups")
-        .update({ confirmation_token: newToken, wallet: sanitizedWallet, ...(referrerId ? { referred_by: referrerId } : {}) })
+        .update({ confirmation_token: newToken, confirmation_token_expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(), wallet: sanitizedWallet, ...(referrerId ? { referred_by: referrerId } : {}) })
         .eq("id", existing.id);
       confirmationToken = newToken;
     } else {
@@ -200,15 +201,14 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: "Signed up! Email confirmation may be delayed.",
-          emailSent: false 
+          message: "Signed up! Email confirmation may be delayed."
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     return new Response(
-      JSON.stringify({ success: true, message: "Check your email to confirm your spot!", emailSent: true }),
+      JSON.stringify({ success: true, message: "Check your email to confirm your spot!" }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

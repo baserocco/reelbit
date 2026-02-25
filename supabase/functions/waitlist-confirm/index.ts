@@ -84,6 +84,23 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Check token expiration first
+    const { data: tokenCheck } = await supabase
+      .from("waitlist_signups")
+      .select("confirmation_token_expires_at, confirmed")
+      .eq("confirmation_token", token)
+      .maybeSingle();
+
+    if (tokenCheck && !tokenCheck.confirmed && tokenCheck.confirmation_token_expires_at) {
+      const expiresAt = new Date(tokenCheck.confirmation_token_expires_at).getTime();
+      if (Date.now() > expiresAt) {
+        return new Response(
+          JSON.stringify({ error: "This confirmation link has expired. Please sign up again." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Confirm the signup
     const { data, error } = await supabase
       .from("waitlist_signups")

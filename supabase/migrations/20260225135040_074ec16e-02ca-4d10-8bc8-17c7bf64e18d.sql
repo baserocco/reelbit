@@ -1,0 +1,1 @@
+ALTER TABLE public.waitlist_signups ADD COLUMN IF NOT EXISTS confirmation_token_expires_at TIMESTAMPTZ DEFAULT (now() + interval '48 hours');

@@ -17,6 +17,7 @@ export type Database = {
       waitlist_signups: {
         Row: {
           confirmation_token: string
+          confirmation_token_expires_at: string | null
           confirmed: boolean
           confirmed_at: string | null
           created_at: string
@@ -28,6 +29,7 @@ export type Database = {
         }
         Insert: {
           confirmation_token?: string
+          confirmation_token_expires_at?: string | null
           confirmed?: boolean
           confirmed_at?: string | null
           created_at?: string
@@ -39,6 +41,7 @@ export type Database = {
         }
         Update: {
           confirmation_token?: string
+          confirmation_token_expires_at?: string | null
           confirmed?: boolean
           confirmed_at?: string | null
           created_at?: string
