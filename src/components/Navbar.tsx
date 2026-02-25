@@ -11,7 +11,7 @@ const Navbar = () => {
   }, []);
 
   const scrollToWaitlist = () => {
-    document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
+    document.getElementById("waitlist-form")?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
   return (

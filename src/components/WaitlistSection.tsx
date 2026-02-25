@@ -151,6 +151,7 @@ const WaitlistSection = () => {
           {/* Right: Form */}
           <div>
             <div
+              id="waitlist-form"
               className="glass-card p-8 lg:p-10"
               style={{
                 border: "1px solid rgba(0,245,255,0.15)",
