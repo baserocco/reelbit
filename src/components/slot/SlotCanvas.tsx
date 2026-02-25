@@ -18,7 +18,7 @@ import {
   getShakeOffset, drawAnticipationEffect, drawWinHighlight,
   type Particle, type AmbientParticle, type ShakeState,
 } from "./AnimationManager";
-import { getSymbolCanvas } from "./SymbolRenderer";
+import { getSymbolCanvas, drawDragonAnimatedOverlay } from "./SymbolRenderer";
 
 // Layout
 const REEL_PADDING = 6;
@@ -591,6 +591,18 @@ export default function SlotCanvas({
               drawSize, drawSize
             );
             ctx.restore();
+
+            // Animated glow overlay for dragon symbols
+            if ((sym.id === "fire_dragon" || sym.id === "ice_dragon") && cellAlpha > 0.5) {
+              drawDragonAnimatedOverlay(
+                ctx,
+                rx + REEL_PADDING + drawOffset,
+                reelAreaY + sy + (CELL_H - SYMBOL_SIZE) / 2 + symbolBounce + reelBounceOff + drawOffset,
+                drawSize,
+                sym.id === "fire_dragon" ? "fire" : "ice",
+                t
+              );
+            }
           }
         }
 

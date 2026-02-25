@@ -1,14 +1,37 @@
 /**
  * SymbolRenderer — Dragon's Inferno Premium AAA.
- * ALL symbols rendered as layered Canvas-drawn graphical objects.
+ * Fire Dragon & Ice Dragon use high-res artwork from a sprite sheet.
+ * All other symbols rendered as layered Canvas-drawn graphical objects.
  * NO emoji. NO Unicode. NO fillText/strokeText for symbol identity.
- * Letters (A,K,Q,J,10,9) drawn as geometric vector paths.
- * Premium symbols: Fire Dragon, Ice Dragon, Wild, Treasure, Sword, Fire Orb, Red Gem, Gold Coin.
  */
 
 import type { SymbolDef } from "./SlotEngine";
 
 const symbolCache = new Map<string, HTMLCanvasElement>();
+
+// ═══════════════════════════════════════════════════
+// Dragon artwork sprite sheet loader
+// ═══════════════════════════════════════════════════
+let dragonSheet: HTMLImageElement | null = null;
+let dragonSheetLoaded = false;
+
+function loadDragonSheet() {
+  if (dragonSheet) return;
+  dragonSheet = new Image();
+  dragonSheet.onload = () => {
+    dragonSheetLoaded = true;
+    // Clear cached dragon symbols so they re-render with the image
+    for (const key of symbolCache.keys()) {
+      if (key.startsWith("fire_dragon_") || key.startsWith("ice_dragon_")) {
+        symbolCache.delete(key);
+      }
+    }
+  };
+  dragonSheet.src = "/images/dragons-sheet.png";
+}
+
+// Start loading immediately
+loadDragonSheet();
 
 function applyDropShadow(ctx: CanvasRenderingContext2D, color: string, blur: number) {
   ctx.shadowColor = color;
@@ -86,265 +109,238 @@ function drawSymbolToCanvas(sym: SymbolDef, size: number): HTMLCanvasElement {
 }
 
 // ═══════════════════════════════════════════════════
-// FIRE DRAGON HEAD (highest value)
+// FIRE DRAGON — uses left half of sprite sheet artwork
 // ═══════════════════════════════════════════════════
 function drawFireDragon(ctx: CanvasRenderingContext2D, r: number) {
-  applyDropShadow(ctx, "rgba(255,50,0,0.5)", r * 0.25);
+  if (dragonSheetLoaded && dragonSheet) {
+    drawDragonFromSheet(ctx, r, "fire");
+  } else {
+    drawFireDragonFallback(ctx, r);
+  }
+}
 
+// ═══════════════════════════════════════════════════
+// ICE DRAGON — uses right half of sprite sheet artwork
+// ═══════════════════════════════════════════════════
+function drawIceDragon(ctx: CanvasRenderingContext2D, r: number) {
+  if (dragonSheetLoaded && dragonSheet) {
+    drawDragonFromSheet(ctx, r, "ice");
+  } else {
+    drawIceDragonFallback(ctx, r);
+  }
+}
+
+/** Draw dragon from the high-res artwork sheet with ornate gold frame */
+function drawDragonFromSheet(ctx: CanvasRenderingContext2D, r: number, type: "fire" | "ice") {
+  if (!dragonSheet) return;
+  const isFire = type === "fire";
+  const sheetW = dragonSheet.naturalWidth;
+  const sheetH = dragonSheet.naturalHeight;
+
+  // Source rect: left half = fire, right half = ice
+  const sx = isFire ? 0 : sheetW * 0.5;
+  const sy = 0;
+  const sw = sheetW * 0.5;
+  const sh = sheetH;
+
+  // Draw area (centered, slightly larger than r for impact)
+  const drawSize = r * 2.1;
+  const drawX = -drawSize / 2;
+  const drawY = -drawSize / 2;
+
+  // Outer aura glow
+  const glowColor = isFire ? "rgba(255,80,0," : "rgba(0,120,255,";
+  const auraGrad = ctx.createRadialGradient(0, 0, drawSize * 0.3, 0, 0, drawSize * 0.7);
+  auraGrad.addColorStop(0, glowColor + "0.25)");
+  auraGrad.addColorStop(0.6, glowColor + "0.08)");
+  auraGrad.addColorStop(1, glowColor + "0)");
+  ctx.fillStyle = auraGrad;
+  ctx.fillRect(-drawSize * 0.7, -drawSize * 0.7, drawSize * 1.4, drawSize * 1.4);
+
+  // Clip to rounded rect for clean edges
+  ctx.save();
+  const cornerR = drawSize * 0.08;
+  roundRectLocal(ctx, drawX, drawY, drawSize, drawSize, cornerR);
+  ctx.clip();
+
+  // Draw the artwork
+  ctx.drawImage(dragonSheet, sx, sy, sw, sh, drawX, drawY, drawSize, drawSize);
+
+  // Cinematic vignette overlay on the image
+  const vignette = ctx.createRadialGradient(0, 0, drawSize * 0.2, 0, 0, drawSize * 0.55);
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(0.8, "rgba(0,0,0,0.1)");
+  vignette.addColorStop(1, "rgba(0,0,0,0.35)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(drawX, drawY, drawSize, drawSize);
+
+  // Gloss overlay
+  ctx.globalCompositeOperation = "screen";
+  const gloss = ctx.createLinearGradient(0, drawY, 0, drawY + drawSize * 0.4);
+  gloss.addColorStop(0, "rgba(255,255,255,0.12)");
+  gloss.addColorStop(0.5, "rgba(255,255,255,0.04)");
+  gloss.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = gloss;
+  ctx.fillRect(drawX, drawY, drawSize, drawSize * 0.4);
+  ctx.globalCompositeOperation = "source-over";
+
+  ctx.restore();
+
+  // Ornate gold frame border
+  const frameColor = isFire ? "#FFD700" : "#88CCFF";
+  const frameShadow = isFire ? "#FF4400" : "#0066FF";
+  ctx.shadowColor = frameShadow;
+  ctx.shadowBlur = 12;
+  ctx.strokeStyle = frameColor;
+  ctx.lineWidth = r * 0.06;
+  roundRectLocal(ctx, drawX, drawY, drawSize, drawSize, cornerR);
+  ctx.stroke();
+
+  // Inner highlight border
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = isFire
+    ? "rgba(255,200,100,0.3)"
+    : "rgba(150,200,255,0.3)";
+  ctx.lineWidth = r * 0.02;
+  roundRectLocal(ctx, drawX + r * 0.04, drawY + r * 0.04, drawSize - r * 0.08, drawSize - r * 0.08, cornerR * 0.7);
+  ctx.stroke();
+
+  // Corner gem accents
+  const gemColor = isFire ? "#FF2200" : "#0088FF";
+  const gemHighlight = isFire ? "#FF8866" : "#66CCFF";
+  const gemPositions = [
+    [drawX + cornerR * 0.8, drawY + cornerR * 0.8],
+    [drawX + drawSize - cornerR * 0.8, drawY + cornerR * 0.8],
+    [drawX + cornerR * 0.8, drawY + drawSize - cornerR * 0.8],
+    [drawX + drawSize - cornerR * 0.8, drawY + drawSize - cornerR * 0.8],
+  ];
+  for (const [gx, gy] of gemPositions) {
+    ctx.shadowColor = gemColor;
+    ctx.shadowBlur = 6;
+    const gemGrad = ctx.createRadialGradient(gx - 1, gy - 1, 0, gx, gy, r * 0.06);
+    gemGrad.addColorStop(0, gemHighlight);
+    gemGrad.addColorStop(0.6, gemColor);
+    gemGrad.addColorStop(1, isFire ? "#880011" : "#003366");
+    ctx.beginPath();
+    ctx.arc(gx, gy, r * 0.055, 0, Math.PI * 2);
+    ctx.fillStyle = gemGrad;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+}
+
+/** Fallback fire dragon (canvas-drawn) when image hasn't loaded yet */
+function drawFireDragonFallback(ctx: CanvasRenderingContext2D, r: number) {
+  applyDropShadow(ctx, "rgba(255,50,0,0.5)", r * 0.25);
   const headGrad = ctx.createRadialGradient(0, -r * 0.1, r * 0.15, 0, 0, r);
   headGrad.addColorStop(0, "#FF6600");
   headGrad.addColorStop(0.35, "#CC1100");
   headGrad.addColorStop(0.7, "#880000");
   headGrad.addColorStop(1, "#440000");
-
   ctx.beginPath();
-  ctx.moveTo(0, -r * 0.9);
-  ctx.bezierCurveTo(r * 0.3, -r * 0.95, r * 0.65, -r * 0.6, r * 0.75, -r * 0.2);
-  ctx.bezierCurveTo(r * 0.85, r * 0.15, r * 0.6, r * 0.5, r * 0.45, r * 0.65);
-  ctx.bezierCurveTo(r * 0.3, r * 0.8, r * 0.1, r * 0.85, 0, r * 0.75);
-  ctx.bezierCurveTo(-r * 0.1, r * 0.85, -r * 0.3, r * 0.8, -r * 0.45, r * 0.65);
-  ctx.bezierCurveTo(-r * 0.6, r * 0.5, -r * 0.85, r * 0.15, -r * 0.75, -r * 0.2);
-  ctx.bezierCurveTo(-r * 0.65, -r * 0.6, -r * 0.3, -r * 0.95, 0, -r * 0.9);
-  ctx.closePath();
+  ctx.arc(0, 0, r * 0.8, 0, Math.PI * 2);
   ctx.fillStyle = headGrad;
   ctx.fill();
   clearShadow(ctx);
-  ctx.strokeStyle = "#FF8800";
-  ctx.lineWidth = r * 0.035;
-  ctx.stroke();
-
-  // Horns
-  for (const side of [-1, 1]) {
-    const hornGrad = ctx.createLinearGradient(side * r * 0.35, -r * 0.5, side * r * 0.6, -r);
-    hornGrad.addColorStop(0, "#DAA520");
-    hornGrad.addColorStop(0.5, "#FFE480");
-    hornGrad.addColorStop(1, "#B8860B");
-    ctx.beginPath();
-    ctx.moveTo(side * r * 0.35, -r * 0.5);
-    ctx.quadraticCurveTo(side * r * 0.75, -r * 1.15, side * r * 0.45, -r);
-    ctx.quadraticCurveTo(side * r * 0.55, -r * 0.7, side * r * 0.35, -r * 0.5);
-    ctx.fillStyle = hornGrad;
-    ctx.fill();
-    ctx.strokeStyle = "#FFD700";
-    ctx.lineWidth = r * 0.02;
-    ctx.stroke();
-  }
-
-  // Scales
-  ctx.save();
-  ctx.globalAlpha = 0.12;
-  for (let row = 0; row < 4; row++) {
-    for (let col = -2; col <= 2; col++) {
-      const sx = col * r * 0.22 + (row % 2) * r * 0.11;
-      const sy = -r * 0.2 + row * r * 0.2;
-      ctx.beginPath();
-      ctx.arc(sx, sy, r * 0.09, 0, Math.PI * 2);
-      const scaleGrad = ctx.createRadialGradient(sx, sy - r * 0.02, 0, sx, sy, r * 0.09);
-      scaleGrad.addColorStop(0, "#FF8800");
-      scaleGrad.addColorStop(1, "transparent");
-      ctx.fillStyle = scaleGrad;
-      ctx.fill();
-    }
-  }
-  ctx.restore();
-
-  // Snout
+  // Simple fire icon
   ctx.beginPath();
-  ctx.moveTo(-r * 0.2, r * 0.15);
-  ctx.quadraticCurveTo(0, r * 0.05, r * 0.2, r * 0.15);
-  ctx.strokeStyle = "rgba(255,100,0,0.3)";
-  ctx.lineWidth = r * 0.025;
-  ctx.stroke();
-
-  // Nostrils with fire glow
-  for (const side of [-1, 1]) {
-    ctx.beginPath();
-    ctx.ellipse(side * r * 0.12, r * 0.25, r * 0.05, r * 0.035, side * 0.2, 0, Math.PI * 2);
-    ctx.fillStyle = "#110000";
-    ctx.fill();
-    const nostrilGlow = ctx.createRadialGradient(side * r * 0.12, r * 0.25, 0, side * r * 0.12, r * 0.25, r * 0.06);
-    nostrilGlow.addColorStop(0, "rgba(255,100,0,0.4)");
-    nostrilGlow.addColorStop(1, "rgba(255,50,0,0)");
-    ctx.fillStyle = nostrilGlow;
-    ctx.fillRect(side * r * 0.12 - r * 0.06, r * 0.25 - r * 0.06, r * 0.12, r * 0.12);
-  }
-
-  // Teeth
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.35, r * 0.45);
-  for (let i = 0; i < 7; i++) {
-    const tx = -r * 0.35 + i * r * 0.1 + r * 0.02;
-    const ty = r * 0.45 + (i % 2 === 0 ? -r * 0.04 : r * 0.02);
-    ctx.lineTo(tx, ty);
-  }
-  ctx.strokeStyle = "#330000";
-  ctx.lineWidth = r * 0.02;
-  ctx.stroke();
-
-  // Eyes with fierce glow
-  for (const side of [-1, 1]) {
-    const ex = side * r * 0.28;
-    const ey = -r * 0.12;
-    const eyeHalo = ctx.createRadialGradient(ex, ey, 0, ex, ey, r * 0.25);
-    eyeHalo.addColorStop(0, "rgba(255,255,0,0.35)");
-    eyeHalo.addColorStop(0.5, "rgba(255,150,0,0.15)");
-    eyeHalo.addColorStop(1, "rgba(255,100,0,0)");
-    ctx.fillStyle = eyeHalo;
-    ctx.fillRect(ex - r * 0.25, ey - r * 0.25, r * 0.5, r * 0.5);
-    ctx.beginPath();
-    ctx.ellipse(ex, ey, r * 0.13, r * 0.085, side * 0.15, 0, Math.PI * 2);
-    const eyeGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, r * 0.12);
-    eyeGrad.addColorStop(0, "#FFFF44");
-    eyeGrad.addColorStop(0.6, "#FFCC00");
-    eyeGrad.addColorStop(1, "#FF8800");
-    ctx.fillStyle = eyeGrad;
-    ctx.fill();
-    ctx.strokeStyle = "#CC6600";
-    ctx.lineWidth = r * 0.015;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(ex, ey, r * 0.03, r * 0.08, 0, 0, Math.PI * 2);
-    ctx.fillStyle = "#110000";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(ex - side * r * 0.04, ey - r * 0.025, r * 0.025, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.5)";
-    ctx.fill();
-  }
-
+  ctx.moveTo(0, -r * 0.5);
+  ctx.quadraticCurveTo(r * 0.3, -r * 0.2, r * 0.15, r * 0.3);
+  ctx.quadraticCurveTo(0, r * 0.1, -r * 0.15, r * 0.3);
+  ctx.quadraticCurveTo(-r * 0.3, -r * 0.2, 0, -r * 0.5);
+  ctx.fillStyle = "#FFD700";
+  ctx.fill();
   drawGlossOverlay(ctx, r, -0.35);
 }
 
-// ═══════════════════════════════════════════════════
-// ICE DRAGON HEAD (second highest value)
-// ═══════════════════════════════════════════════════
-function drawIceDragon(ctx: CanvasRenderingContext2D, r: number) {
+/** Fallback ice dragon (canvas-drawn) when image hasn't loaded yet */
+function drawIceDragonFallback(ctx: CanvasRenderingContext2D, r: number) {
   applyDropShadow(ctx, "rgba(0,150,255,0.5)", r * 0.25);
-
   const headGrad = ctx.createRadialGradient(0, -r * 0.1, r * 0.15, 0, 0, r);
   headGrad.addColorStop(0, "#88DDFF");
   headGrad.addColorStop(0.35, "#2299CC");
   headGrad.addColorStop(0.7, "#115588");
   headGrad.addColorStop(1, "#0A2244");
-
   ctx.beginPath();
-  ctx.moveTo(0, -r * 0.9);
-  ctx.bezierCurveTo(r * 0.3, -r * 0.95, r * 0.65, -r * 0.6, r * 0.75, -r * 0.2);
-  ctx.bezierCurveTo(r * 0.85, r * 0.15, r * 0.6, r * 0.5, r * 0.45, r * 0.65);
-  ctx.bezierCurveTo(r * 0.3, r * 0.8, r * 0.1, r * 0.85, 0, r * 0.75);
-  ctx.bezierCurveTo(-r * 0.1, r * 0.85, -r * 0.3, r * 0.8, -r * 0.45, r * 0.65);
-  ctx.bezierCurveTo(-r * 0.6, r * 0.5, -r * 0.85, r * 0.15, -r * 0.75, -r * 0.2);
-  ctx.bezierCurveTo(-r * 0.65, -r * 0.6, -r * 0.3, -r * 0.95, 0, -r * 0.9);
-  ctx.closePath();
+  ctx.arc(0, 0, r * 0.8, 0, Math.PI * 2);
   ctx.fillStyle = headGrad;
   ctx.fill();
   clearShadow(ctx);
-  ctx.strokeStyle = "#66CCFF";
-  ctx.lineWidth = r * 0.035;
-  ctx.stroke();
-
-  // Ice crystal horns
-  for (const side of [-1, 1]) {
-    const hornGrad = ctx.createLinearGradient(side * r * 0.35, -r * 0.5, side * r * 0.6, -r);
-    hornGrad.addColorStop(0, "#88CCEE");
-    hornGrad.addColorStop(0.5, "#DDEEFF");
-    hornGrad.addColorStop(1, "#4488BB");
+  for (const angle of [0, Math.PI / 3, -Math.PI / 3]) {
     ctx.beginPath();
-    ctx.moveTo(side * r * 0.35, -r * 0.5);
-    ctx.quadraticCurveTo(side * r * 0.75, -r * 1.15, side * r * 0.45, -r);
-    ctx.quadraticCurveTo(side * r * 0.55, -r * 0.7, side * r * 0.35, -r * 0.5);
-    ctx.fillStyle = hornGrad;
-    ctx.fill();
+    ctx.moveTo(Math.cos(angle - Math.PI / 2) * r * 0.1, Math.sin(angle - Math.PI / 2) * r * 0.1 - r * 0.1);
+    ctx.lineTo(Math.cos(angle) * r * 0.45, Math.sin(angle) * r * 0.45 - r * 0.1);
     ctx.strokeStyle = "#AADDFF";
-    ctx.lineWidth = r * 0.02;
+    ctx.lineWidth = r * 0.04;
     ctx.stroke();
   }
+  drawGlossOverlay(ctx, r, -0.35);
+}
 
-  // Ice scales
-  ctx.save();
-  ctx.globalAlpha = 0.15;
-  for (let row = 0; row < 4; row++) {
-    for (let col = -2; col <= 2; col++) {
-      const sx = col * r * 0.22 + (row % 2) * r * 0.11;
-      const sy = -r * 0.2 + row * r * 0.2;
+/**
+ * Draw animated dragon overlay effects (called per-frame from SlotCanvas).
+ * Renders pulsing glow, ember particles, and frame shimmer on top of cached symbol.
+ */
+export function drawDragonAnimatedOverlay(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, size: number,
+  type: "fire" | "ice", time: number
+) {
+  const cx = x + size / 2;
+  const cy = y + size / 2;
+  const r = size * 0.38;
+  const isFire = type === "fire";
+
+  // Pulsing outer aura
+  const pulse = 0.5 + Math.sin(time * 0.06) * 0.3 + Math.sin(time * 0.11) * 0.2;
+  const auraColor = isFire ? `rgba(255,60,0,${pulse * 0.12})` : `rgba(0,100,255,${pulse * 0.12})`;
+  const auraGrad = ctx.createRadialGradient(cx, cy, size * 0.25, cx, cy, size * 0.55);
+  auraGrad.addColorStop(0, auraColor);
+  auraGrad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = auraGrad;
+  ctx.fillRect(x - size * 0.1, y - size * 0.1, size * 1.2, size * 1.2);
+
+  // Animated corner sparkles
+  const sparklePhase = time * 0.04;
+  const drawSize = r * 2.1;
+  const cornerR = drawSize * 0.08;
+  const drawX = cx - drawSize / 2;
+  const drawY = cy - drawSize / 2;
+  const corners = [
+    [drawX + cornerR * 0.8, drawY + cornerR * 0.8],
+    [drawX + drawSize - cornerR * 0.8, drawY + cornerR * 0.8],
+    [drawX + cornerR * 0.8, drawY + drawSize - cornerR * 0.8],
+    [drawX + drawSize - cornerR * 0.8, drawY + drawSize - cornerR * 0.8],
+  ];
+  for (let i = 0; i < corners.length; i++) {
+    const [gx, gy] = corners[i];
+    const sparkle = 0.3 + Math.sin(sparklePhase + i * 1.5) * 0.7;
+    if (sparkle > 0.5) {
+      const sparkSize = r * 0.04 * sparkle;
+      ctx.save();
+      ctx.globalAlpha = sparkle * 0.8;
+      ctx.fillStyle = isFire ? "#FFD700" : "#88DDFF";
       ctx.beginPath();
-      ctx.arc(sx, sy, r * 0.09, 0, Math.PI * 2);
-      const scaleGrad = ctx.createRadialGradient(sx, sy - r * 0.02, 0, sx, sy, r * 0.09);
-      scaleGrad.addColorStop(0, "#88DDFF");
-      scaleGrad.addColorStop(1, "transparent");
-      ctx.fillStyle = scaleGrad;
+      ctx.moveTo(gx, gy - sparkSize);
+      ctx.lineTo(gx + sparkSize * 0.3, gy);
+      ctx.lineTo(gx, gy + sparkSize);
+      ctx.lineTo(gx - sparkSize * 0.3, gy);
+      ctx.closePath();
       ctx.fill();
+      ctx.restore();
     }
   }
-  ctx.restore();
 
-  // Frost breath
-  ctx.save();
-  ctx.globalAlpha = 0.15;
-  for (let i = 0; i < 3; i++) {
-    const bx = (i - 1) * r * 0.15;
-    const by = r * 0.55 + i * r * 0.05;
-    const bSize = r * 0.12 - i * r * 0.02;
-    const breathGrad = ctx.createRadialGradient(bx, by, 0, bx, by, bSize);
-    breathGrad.addColorStop(0, "#FFFFFF");
-    breathGrad.addColorStop(1, "rgba(100,200,255,0)");
-    ctx.fillStyle = breathGrad;
-    ctx.fillRect(bx - bSize, by - bSize, bSize * 2, bSize * 2);
-  }
-  ctx.restore();
-
-  // Eyes — icy blue
-  for (const side of [-1, 1]) {
-    const ex = side * r * 0.28;
-    const ey = -r * 0.12;
-    const eyeHalo = ctx.createRadialGradient(ex, ey, 0, ex, ey, r * 0.25);
-    eyeHalo.addColorStop(0, "rgba(100,200,255,0.4)");
-    eyeHalo.addColorStop(0.5, "rgba(50,150,255,0.15)");
-    eyeHalo.addColorStop(1, "rgba(0,100,200,0)");
-    ctx.fillStyle = eyeHalo;
-    ctx.fillRect(ex - r * 0.25, ey - r * 0.25, r * 0.5, r * 0.5);
-    ctx.beginPath();
-    ctx.ellipse(ex, ey, r * 0.13, r * 0.085, side * 0.15, 0, Math.PI * 2);
-    const eyeGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, r * 0.12);
-    eyeGrad.addColorStop(0, "#EEFFFF");
-    eyeGrad.addColorStop(0.6, "#44CCFF");
-    eyeGrad.addColorStop(1, "#0088CC");
-    ctx.fillStyle = eyeGrad;
-    ctx.fill();
-    ctx.strokeStyle = "#3399BB";
-    ctx.lineWidth = r * 0.015;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(ex, ey, r * 0.03, r * 0.08, 0, 0, Math.PI * 2);
-    ctx.fillStyle = "#001133";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(ex - side * r * 0.04, ey - r * 0.025, r * 0.025, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.fill();
-  }
-
-  // Snout
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.2, r * 0.15);
-  ctx.quadraticCurveTo(0, r * 0.05, r * 0.2, r * 0.15);
-  ctx.strokeStyle = "rgba(100,200,255,0.3)";
-  ctx.lineWidth = r * 0.025;
-  ctx.stroke();
-
-  // Teeth
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.35, r * 0.45);
-  for (let i = 0; i < 7; i++) {
-    const tx = -r * 0.35 + i * r * 0.1 + r * 0.02;
-    const ty = r * 0.45 + (i % 2 === 0 ? -r * 0.04 : r * 0.02);
-    ctx.lineTo(tx, ty);
-  }
-  ctx.strokeStyle = "#112244";
-  ctx.lineWidth = r * 0.02;
-  ctx.stroke();
-
-  drawGlossOverlay(ctx, r, -0.35);
+  // Travelling light shimmer along frame edge
+  const shimmerProgress = (time * 0.015) % 1;
+  const shimmerAngle = shimmerProgress * Math.PI * 2;
+  const shimmerX = cx + Math.cos(shimmerAngle) * drawSize * 0.48;
+  const shimmerY = cy + Math.sin(shimmerAngle) * drawSize * 0.48;
+  const shimmerGrad = ctx.createRadialGradient(shimmerX, shimmerY, 0, shimmerX, shimmerY, r * 0.2);
+  shimmerGrad.addColorStop(0, isFire ? "rgba(255,220,100,0.4)" : "rgba(150,220,255,0.4)");
+  shimmerGrad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = shimmerGrad;
+  ctx.fillRect(shimmerX - r * 0.2, shimmerY - r * 0.2, r * 0.4, r * 0.4);
 }
 
 // ═══════════════════════════════════════════════════
