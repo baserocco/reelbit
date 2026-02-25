@@ -40,7 +40,7 @@ function getSfx(): GainNode {
 export function setMuted(m: boolean) {
   muted = m;
   if (sfxGain) sfxGain.gain.setTargetAtTime(m ? 0 : 0.4, getCtx().currentTime, 0.05);
-  if (ambientGain) ambientGain.gain.setTargetAtTime(m ? 0 : ambientVolume * 0.18, getCtx().currentTime, 0.3);
+  if (ambientGain) ambientGain.gain.setTargetAtTime(m ? 0 : ambientVolume * 0.35, getCtx().currentTime, 0.3);
 }
 export function isMuted(): boolean { return muted; }
 
@@ -104,7 +104,7 @@ export function startAmbient() {
 
   ambientGain = c.createGain();
   ambientGain.gain.setValueAtTime(0, c.currentTime);
-  ambientGain.gain.linearRampToValueAtTime(muted ? 0 : ambientVolume * 0.18, c.currentTime + 3);
+  ambientGain.gain.linearRampToValueAtTime(muted ? 0 : ambientVolume * 0.35, c.currentTime + 3);
   ambientGain.connect(masterGain!);
 
   // — Compressor for cohesion
@@ -216,13 +216,12 @@ export function startAmbient() {
     ambientNodes.push(harm, harmLfo, harmAmpLfo);
   });
 
-  // ── Layer 6: Volcanic Rumble (filtered noise) ──
+  // ── Layer 6: Volcanic Rumble (filtered noise — subtle) ──
   const rumbleLen = 6;
   const rumbleBuf = c.createBuffer(2, c.sampleRate * rumbleLen, c.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
     const rd = rumbleBuf.getChannelData(ch);
     for (let i = 0; i < rd.length; i++) {
-      // Brownian noise (smoother)
       rd[i] = i === 0 ? 0 : rd[i - 1] + (Math.random() * 2 - 1) * 0.04;
       rd[i] = Math.max(-1, Math.min(1, rd[i]));
     }
@@ -230,12 +229,11 @@ export function startAmbient() {
   const rumble = c.createBufferSource();
   rumble.buffer = rumbleBuf;
   rumble.loop = true;
-  const rumbleLpf = c.createBiquadFilter(); rumbleLpf.type = "lowpass"; rumbleLpf.frequency.value = 120; rumbleLpf.Q.value = 2;
-  // Sweep the filter
+  const rumbleLpf = c.createBiquadFilter(); rumbleLpf.type = "lowpass"; rumbleLpf.frequency.value = 80; rumbleLpf.Q.value = 1;
   const filterLfo = c.createOscillator(); filterLfo.type = "sine"; filterLfo.frequency.value = 0.04;
-  const filterLfoG = c.createGain(); filterLfoG.gain.value = 60;
+  const filterLfoG = c.createGain(); filterLfoG.gain.value = 30;
   filterLfo.connect(filterLfoG); filterLfoG.connect(rumbleLpf.frequency);
-  const rumbleG = c.createGain(); rumbleG.gain.value = 0.25;
+  const rumbleG = c.createGain(); rumbleG.gain.value = 0.06;
   rumble.connect(rumbleLpf); rumbleLpf.connect(rumbleG); rumbleG.connect(dryBus);
   rumble.start(); filterLfo.start();
   ambientNodes.push(rumble as any, filterLfo);
@@ -250,11 +248,11 @@ export function startAmbient() {
   const wind = c.createBufferSource();
   wind.buffer = windBuf;
   wind.loop = true;
-  const windBpf = c.createBiquadFilter(); windBpf.type = "bandpass"; windBpf.frequency.value = 800; windBpf.Q.value = 0.5;
+  const windBpf = c.createBiquadFilter(); windBpf.type = "bandpass"; windBpf.frequency.value = 600; windBpf.Q.value = 0.3;
   const windLfo = c.createOscillator(); windLfo.type = "sine"; windLfo.frequency.value = 0.06;
-  const windLfoG = c.createGain(); windLfoG.gain.value = 400;
+  const windLfoG = c.createGain(); windLfoG.gain.value = 200;
   windLfo.connect(windLfoG); windLfoG.connect(windBpf.frequency);
-  const windG = c.createGain(); windG.gain.value = 0.04;
+  const windG = c.createGain(); windG.gain.value = 0.012;
   const windAmpLfo = c.createOscillator(); windAmpLfo.type = "sine"; windAmpLfo.frequency.value = 0.025;
   const windAmpG = c.createGain(); windAmpG.gain.value = 0.03;
   windAmpLfo.connect(windAmpG); windAmpG.connect(windG.gain);
@@ -316,7 +314,7 @@ export function stopAmbient() {
 export function setAmbientVolume(vol: number) {
   ambientVolume = Math.max(0, Math.min(1, vol));
   if (ambientGain && !muted) {
-    ambientGain.gain.setTargetAtTime(ambientVolume * 0.18, getCtx().currentTime, 0.1);
+    ambientGain.gain.setTargetAtTime(ambientVolume * 0.35, getCtx().currentTime, 0.1);
   }
 }
 export function getAmbientVolume(): number { return ambientVolume; }

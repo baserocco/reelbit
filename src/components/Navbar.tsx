@@ -55,7 +55,7 @@ const Navbar = () => {
               <img
                 src={reelbitLogo}
                 alt="ReelBit Logo"
-                className="relative h-9 w-9 rounded-lg object-cover"
+                className="relative h-9 w-9 rounded-lg object-contain"
                 width={36}
                 height={36}
                 loading="eager"
