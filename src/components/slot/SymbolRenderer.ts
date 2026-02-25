@@ -1,20 +1,14 @@
 /**
  * SymbolRenderer — Dragon's Inferno.
- * All symbols are layered Canvas-drawn graphical objects with:
- * - Drop shadows for depth
- * - Gradient fills with metallic/molten textures
- * - Glossy highlight overlays
- * - Outer glow effects
- * - Inner shadow illusion using gradients
- * - 3D shading via directional lighting
- * NO emoji. NO Unicode characters. NO text-based symbols.
+ * ALL symbols rendered as layered Canvas-drawn graphical objects.
+ * NO emoji. NO Unicode. NO fillText/strokeText for symbol identity.
+ * Letters (A,K,Q,J,10) are drawn as geometric vector paths.
  */
 
 import type { SymbolDef } from "./SlotEngine";
 
 const symbolCache = new Map<string, HTMLCanvasElement>();
 
-/** Shared helper: draw a soft drop shadow beneath any shape */
 function applyDropShadow(ctx: CanvasRenderingContext2D, color: string, blur: number) {
   ctx.shadowColor = color;
   ctx.shadowBlur = blur;
@@ -29,7 +23,6 @@ function clearShadow(ctx: CanvasRenderingContext2D) {
   ctx.shadowOffsetY = 0;
 }
 
-/** Shared helper: draw glossy highlight overlay */
 function drawGlossOverlay(ctx: CanvasRenderingContext2D, r: number, yOff = -0.2) {
   ctx.save();
   ctx.globalCompositeOperation = "screen";
@@ -44,7 +37,6 @@ function drawGlossOverlay(ctx: CanvasRenderingContext2D, r: number, yOff = -0.2)
   ctx.restore();
 }
 
-/** Shared helper: outer glow ring */
 function drawOuterGlow(ctx: CanvasRenderingContext2D, r: number, color: string, intensity = 0.3) {
   const glow = ctx.createRadialGradient(0, 0, r * 0.6, 0, 0, r * 1.4);
   glow.addColorStop(0, color + Math.floor(intensity * 255).toString(16).padStart(2, "0"));
@@ -65,7 +57,6 @@ function drawSymbolToCanvas(sym: SymbolDef, size: number): HTMLCanvasElement {
   ctx.save();
   ctx.translate(cx, cy);
 
-  // High-value symbols get outer glow
   const highValue = ["dragon", "sword", "treasure", "fire_orb", "red_gem", "gold_coin", "scatter"].includes(sym.id);
   if (highValue) {
     drawOuterGlow(ctx, r, sym.color, 0.25);
@@ -78,11 +69,11 @@ function drawSymbolToCanvas(sym: SymbolDef, size: number): HTMLCanvasElement {
     case "fire_orb": drawFireOrb(ctx, r); break;
     case "red_gem": drawRedGem(ctx, r); break;
     case "gold_coin": drawGoldCoin(ctx, r); break;
-    case "ace": drawMoltenLetter(ctx, r, "A", "#F0D060"); break;
-    case "king": drawMoltenLetter(ctx, r, "K", "#E0B840"); break;
-    case "queen": drawMoltenLetter(ctx, r, "Q", "#D0A030"); break;
-    case "jack": drawMoltenLetter(ctx, r, "J", "#C09028"); break;
-    case "ten": drawMoltenLetter(ctx, r, "10", "#B08020"); break;
+    case "ace": drawLetterA(ctx, r); break;
+    case "king": drawLetterK(ctx, r); break;
+    case "queen": drawLetterQ(ctx, r); break;
+    case "jack": drawLetterJ(ctx, r); break;
+    case "ten": drawLetter10(ctx, r); break;
     case "scatter": drawScatter(ctx, r); break;
   }
 
@@ -91,13 +82,11 @@ function drawSymbolToCanvas(sym: SymbolDef, size: number): HTMLCanvasElement {
 }
 
 // ═══════════════════════════════════════════════════
-// DRAGON HEAD — stylized flame silhouette, glowing eyes
+// DRAGON HEAD
 // ═══════════════════════════════════════════════════
 function drawDragon(ctx: CanvasRenderingContext2D, r: number) {
-  // Drop shadow
   applyDropShadow(ctx, "rgba(255,50,0,0.5)", r * 0.25);
 
-  // Head shape — flame-styled silhouette
   const headGrad = ctx.createRadialGradient(0, -r * 0.1, r * 0.15, 0, 0, r);
   headGrad.addColorStop(0, "#FF6600");
   headGrad.addColorStop(0.35, "#CC1100");
@@ -116,13 +105,11 @@ function drawDragon(ctx: CanvasRenderingContext2D, r: number) {
   ctx.fillStyle = headGrad;
   ctx.fill();
   clearShadow(ctx);
-
-  // Metallic edge stroke
   ctx.strokeStyle = "#FF8800";
   ctx.lineWidth = r * 0.035;
   ctx.stroke();
 
-  // Horns — golden with 3D shading
+  // Horns
   for (const side of [-1, 1]) {
     const hornGrad = ctx.createLinearGradient(side * r * 0.35, -r * 0.5, side * r * 0.6, -r);
     hornGrad.addColorStop(0, "#DAA520");
@@ -139,7 +126,7 @@ function drawDragon(ctx: CanvasRenderingContext2D, r: number) {
     ctx.stroke();
   }
 
-  // Scales — inner shadow texture
+  // Scales
   ctx.save();
   ctx.globalAlpha = 0.12;
   for (let row = 0; row < 4; row++) {
@@ -157,7 +144,7 @@ function drawDragon(ctx: CanvasRenderingContext2D, r: number) {
   }
   ctx.restore();
 
-  // Snout ridge
+  // Snout
   ctx.beginPath();
   ctx.moveTo(-r * 0.2, r * 0.15);
   ctx.quadraticCurveTo(0, r * 0.05, r * 0.2, r * 0.15);
@@ -165,7 +152,7 @@ function drawDragon(ctx: CanvasRenderingContext2D, r: number) {
   ctx.lineWidth = r * 0.025;
   ctx.stroke();
 
-  // Nostrils — dark with inner glow
+  // Nostrils
   for (const side of [-1, 1]) {
     ctx.beginPath();
     ctx.ellipse(side * r * 0.12, r * 0.25, r * 0.05, r * 0.035, side * 0.2, 0, Math.PI * 2);
@@ -178,7 +165,7 @@ function drawDragon(ctx: CanvasRenderingContext2D, r: number) {
     ctx.fillRect(side * r * 0.12 - r * 0.06, r * 0.25 - r * 0.06, r * 0.12, r * 0.12);
   }
 
-  // Mouth — jagged teeth line
+  // Teeth
   ctx.beginPath();
   ctx.moveTo(-r * 0.35, r * 0.45);
   for (let i = 0; i < 7; i++) {
@@ -190,20 +177,16 @@ function drawDragon(ctx: CanvasRenderingContext2D, r: number) {
   ctx.lineWidth = r * 0.02;
   ctx.stroke();
 
-  // EYES — intense glowing with slit pupils
+  // Eyes
   for (const side of [-1, 1]) {
     const ex = side * r * 0.28;
     const ey = -r * 0.12;
-
-    // Eye glow halo
     const eyeHalo = ctx.createRadialGradient(ex, ey, 0, ex, ey, r * 0.25);
     eyeHalo.addColorStop(0, "rgba(255,255,0,0.35)");
     eyeHalo.addColorStop(0.5, "rgba(255,150,0,0.15)");
     eyeHalo.addColorStop(1, "rgba(255,100,0,0)");
     ctx.fillStyle = eyeHalo;
     ctx.fillRect(ex - r * 0.25, ey - r * 0.25, r * 0.5, r * 0.5);
-
-    // Eye shape
     ctx.beginPath();
     ctx.ellipse(ex, ey, r * 0.13, r * 0.085, side * 0.15, 0, Math.PI * 2);
     const eyeGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, r * 0.12);
@@ -215,21 +198,16 @@ function drawDragon(ctx: CanvasRenderingContext2D, r: number) {
     ctx.strokeStyle = "#CC6600";
     ctx.lineWidth = r * 0.015;
     ctx.stroke();
-
-    // Slit pupil
     ctx.beginPath();
     ctx.ellipse(ex, ey, r * 0.03, r * 0.08, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#110000";
     ctx.fill();
-
-    // Eye specular
     ctx.beginPath();
     ctx.arc(ex - side * r * 0.04, ey - r * 0.025, r * 0.025, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255,255,255,0.5)";
     ctx.fill();
   }
 
-  // Top glossy highlight
   drawGlossOverlay(ctx, r, -0.35);
 }
 
@@ -238,8 +216,6 @@ function drawDragon(ctx: CanvasRenderingContext2D, r: number) {
 // ═══════════════════════════════════════════════════
 function drawSword(ctx: CanvasRenderingContext2D, r: number) {
   applyDropShadow(ctx, "rgba(255,150,0,0.4)", r * 0.2);
-
-  // Blade with metallic gradient
   const bladeGrad = ctx.createLinearGradient(-r * 0.1, -r * 0.9, r * 0.1, r * 0.15);
   bladeGrad.addColorStop(0, "#F0F0F0");
   bladeGrad.addColorStop(0.15, "#FFFFFF");
@@ -261,14 +237,13 @@ function drawSword(ctx: CanvasRenderingContext2D, r: number) {
   ctx.lineWidth = r * 0.015;
   ctx.stroke();
 
-  // Blade center fuller
+  // Fuller
   ctx.beginPath();
   ctx.moveTo(0, -r * 0.88);
   ctx.lineTo(0, r * 0.1);
   ctx.strokeStyle = "rgba(255,255,255,0.5)";
   ctx.lineWidth = r * 0.025;
   ctx.stroke();
-  // Dark fuller line
   ctx.beginPath();
   ctx.moveTo(r * 0.01, -r * 0.85);
   ctx.lineTo(r * 0.01, r * 0.08);
@@ -276,7 +251,7 @@ function drawSword(ctx: CanvasRenderingContext2D, r: number) {
   ctx.lineWidth = r * 0.015;
   ctx.stroke();
 
-  // Flame trail on blade
+  // Flame trail
   ctx.save();
   ctx.globalCompositeOperation = "screen";
   for (let i = 0; i < 7; i++) {
@@ -291,7 +266,7 @@ function drawSword(ctx: CanvasRenderingContext2D, r: number) {
   }
   ctx.restore();
 
-  // Crossguard — ornate gold
+  // Crossguard
   const guardGrad = ctx.createLinearGradient(-r * 0.45, r * 0.12, r * 0.45, r * 0.12);
   guardGrad.addColorStop(0, "#8B6914");
   guardGrad.addColorStop(0.2, "#FFD700");
@@ -322,7 +297,7 @@ function drawSword(ctx: CanvasRenderingContext2D, r: number) {
   ctx.fill();
   clearShadow(ctx);
 
-  // Handle with leather wrapping
+  // Handle
   const handleGrad = ctx.createLinearGradient(-r * 0.06, r * 0.22, r * 0.06, r * 0.22);
   handleGrad.addColorStop(0, "#3A2010");
   handleGrad.addColorStop(0.5, "#6B4520");
@@ -330,7 +305,6 @@ function drawSword(ctx: CanvasRenderingContext2D, r: number) {
   ctx.fillStyle = handleGrad;
   roundRectLocal(ctx, -r * 0.06, r * 0.22, r * 0.12, r * 0.42, r * 0.02);
   ctx.fill();
-
   for (let i = 0; i < 5; i++) {
     const wy = r * (0.26 + i * 0.08);
     ctx.beginPath();
@@ -359,8 +333,6 @@ function drawSword(ctx: CanvasRenderingContext2D, r: number) {
 // ═══════════════════════════════════════════════════
 function drawTreasure(ctx: CanvasRenderingContext2D, r: number) {
   applyDropShadow(ctx, "rgba(180,130,20,0.4)", r * 0.2);
-
-  // Chest body with wood grain gradient
   const bodyGrad = ctx.createLinearGradient(0, -r * 0.1, 0, r * 0.65);
   bodyGrad.addColorStop(0, "#9B7418");
   bodyGrad.addColorStop(0.3, "#7B5A14");
@@ -374,8 +346,6 @@ function drawTreasure(ctx: CanvasRenderingContext2D, r: number) {
   ctx.strokeStyle = "#DAA520";
   ctx.lineWidth = r * 0.03;
   ctx.stroke();
-
-  // Metal bands
   for (const y of [-r * 0.05, r * 0.25, r * 0.55]) {
     ctx.beginPath();
     ctx.moveTo(-r * 0.65, y);
@@ -384,8 +354,6 @@ function drawTreasure(ctx: CanvasRenderingContext2D, r: number) {
     ctx.lineWidth = r * 0.025;
     ctx.stroke();
   }
-
-  // Lid — curved with metallic highlight
   ctx.beginPath();
   ctx.moveTo(-r * 0.65, -r * 0.08);
   ctx.quadraticCurveTo(0, -r * 0.6, r * 0.65, -r * 0.08);
@@ -400,8 +368,6 @@ function drawTreasure(ctx: CanvasRenderingContext2D, r: number) {
   ctx.strokeStyle = "#DAA520";
   ctx.lineWidth = r * 0.025;
   ctx.stroke();
-
-  // Lid highlight
   ctx.beginPath();
   ctx.moveTo(-r * 0.5, -r * 0.12);
   ctx.quadraticCurveTo(0, -r * 0.45, r * 0.5, -r * 0.12);
@@ -409,40 +375,34 @@ function drawTreasure(ctx: CanvasRenderingContext2D, r: number) {
   ctx.lineWidth = r * 0.02;
   ctx.stroke();
 
-  // Gold coins spilling — 3D with highlight
   const coins = [
     [-r * 0.28, -r * 0.28, r * 0.1], [0, -r * 0.38, r * 0.11],
     [r * 0.22, -r * 0.24, r * 0.09], [-r * 0.12, -r * 0.48, r * 0.08],
     [r * 0.1, -r * 0.42, r * 0.085],
   ];
-  for (const [cx, cy, cr] of coins) {
-    const coinGrad = ctx.createRadialGradient(cx - cr * 0.3, cy - cr * 0.3, 0, cx, cy, cr);
+  for (const [ccx, ccy, cr] of coins) {
+    const coinGrad = ctx.createRadialGradient(ccx - cr * 0.3, ccy - cr * 0.3, 0, ccx, ccy, cr);
     coinGrad.addColorStop(0, "#FFF8DC");
     coinGrad.addColorStop(0.4, "#FFD700");
     coinGrad.addColorStop(1, "#B8860B");
     ctx.beginPath();
-    ctx.ellipse(cx, cy, cr, cr * 0.75, 0, 0, Math.PI * 2);
+    ctx.ellipse(ccx, ccy, cr, cr * 0.75, 0, 0, Math.PI * 2);
     ctx.fillStyle = coinGrad;
     ctx.fill();
     ctx.strokeStyle = "#DAA520";
     ctx.lineWidth = r * 0.012;
     ctx.stroke();
-    // Coin specular
     ctx.beginPath();
-    ctx.arc(cx - cr * 0.25, cy - cr * 0.2, cr * 0.2, 0, Math.PI * 2);
+    ctx.arc(ccx - cr * 0.25, ccy - cr * 0.2, cr * 0.2, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255,255,255,0.25)";
     ctx.fill();
   }
-
-  // Golden glow emanating from chest opening
   const chestGlow = ctx.createRadialGradient(0, -r * 0.3, 0, 0, -r * 0.3, r * 0.55);
   chestGlow.addColorStop(0, "rgba(255,215,0,0.3)");
   chestGlow.addColorStop(0.5, "rgba(255,180,0,0.1)");
   chestGlow.addColorStop(1, "rgba(255,150,0,0)");
   ctx.fillStyle = chestGlow;
   ctx.fillRect(-r, -r * 0.85, r * 2, r * 0.8);
-
-  // Lock — ornate
   const lockGrad = ctx.createRadialGradient(-r * 0.02, r * 0.12, 0, 0, r * 0.15, r * 0.09);
   lockGrad.addColorStop(0, "#FFF0A0");
   lockGrad.addColorStop(0.5, "#FFD700");
@@ -454,13 +414,11 @@ function drawTreasure(ctx: CanvasRenderingContext2D, r: number) {
   ctx.strokeStyle = "#B8860B";
   ctx.lineWidth = r * 0.015;
   ctx.stroke();
-  // Keyhole
   ctx.beginPath();
   ctx.arc(0, r * 0.14, r * 0.02, 0, Math.PI * 2);
   ctx.fillStyle = "#330000";
   ctx.fill();
   ctx.fillRect(-r * 0.008, r * 0.14, r * 0.016, r * 0.04);
-
   drawGlossOverlay(ctx, r * 0.6, -0.15);
 }
 
@@ -468,7 +426,6 @@ function drawTreasure(ctx: CanvasRenderingContext2D, r: number) {
 // FIRE ORB
 // ═══════════════════════════════════════════════════
 function drawFireOrb(ctx: CanvasRenderingContext2D, r: number) {
-  // Outer glow rings
   for (let i = 3; i >= 0; i--) {
     const ringR = r * (0.9 + i * 0.12);
     const ringGrad = ctx.createRadialGradient(0, 0, ringR * 0.7, 0, 0, ringR);
@@ -477,10 +434,7 @@ function drawFireOrb(ctx: CanvasRenderingContext2D, r: number) {
     ctx.fillStyle = ringGrad;
     ctx.fillRect(-ringR, -ringR, ringR * 2, ringR * 2);
   }
-
   applyDropShadow(ctx, "rgba(255,60,0,0.5)", r * 0.3);
-
-  // Main orb
   const orbGrad = ctx.createRadialGradient(-r * 0.15, -r * 0.2, 0, 0, 0, r * 0.72);
   orbGrad.addColorStop(0, "#FFEE99");
   orbGrad.addColorStop(0.2, "#FFBB44");
@@ -492,8 +446,6 @@ function drawFireOrb(ctx: CanvasRenderingContext2D, r: number) {
   ctx.fillStyle = orbGrad;
   ctx.fill();
   clearShadow(ctx);
-
-  // Inner fire plasma
   ctx.save();
   ctx.globalCompositeOperation = "screen";
   for (let i = 0; i < 4; i++) {
@@ -510,15 +462,11 @@ function drawFireOrb(ctx: CanvasRenderingContext2D, r: number) {
     ctx.fill();
   }
   ctx.restore();
-
-  // Edge ring
   ctx.beginPath();
   ctx.arc(0, 0, r * 0.72, 0, Math.PI * 2);
   ctx.strokeStyle = "rgba(255,150,0,0.4)";
   ctx.lineWidth = r * 0.035;
   ctx.stroke();
-
-  // Specular highlight
   ctx.beginPath();
   ctx.ellipse(-r * 0.2, -r * 0.28, r * 0.18, r * 0.1, -0.3, 0, Math.PI * 2);
   ctx.fillStyle = "rgba(255,255,255,0.4)";
@@ -530,19 +478,16 @@ function drawFireOrb(ctx: CanvasRenderingContext2D, r: number) {
 }
 
 // ═══════════════════════════════════════════════════
-// RED GEM — faceted with sparkle
+// RED GEM
 // ═══════════════════════════════════════════════════
 function drawRedGem(ctx: CanvasRenderingContext2D, r: number) {
   applyDropShadow(ctx, "rgba(200,0,50,0.4)", r * 0.2);
-
-  // Main gem body
   const gemGrad = ctx.createLinearGradient(-r * 0.6, -r * 0.8, r * 0.6, r * 0.8);
   gemGrad.addColorStop(0, "#FF3366");
   gemGrad.addColorStop(0.25, "#FF1744");
   gemGrad.addColorStop(0.5, "#CC0033");
   gemGrad.addColorStop(0.75, "#FF0033");
   gemGrad.addColorStop(1, "#880022");
-
   ctx.beginPath();
   ctx.moveTo(0, -r * 0.88);
   ctx.lineTo(r * 0.62, -r * 0.32);
@@ -557,8 +502,6 @@ function drawRedGem(ctx: CanvasRenderingContext2D, r: number) {
   ctx.strokeStyle = "#FF6680";
   ctx.lineWidth = r * 0.035;
   ctx.stroke();
-
-  // Facet lines with varying opacity
   const facets = [
     [[0, -r * 0.88], [r * 0.3, 0]], [[0, -r * 0.88], [-r * 0.3, 0]],
     [[0, r * 0.88], [r * 0.3, 0]], [[0, r * 0.88], [-r * 0.3, 0]],
@@ -572,8 +515,6 @@ function drawRedGem(ctx: CanvasRenderingContext2D, r: number) {
     ctx.lineWidth = r * 0.015;
     ctx.stroke();
   }
-
-  // Inner highlight facet
   ctx.beginPath();
   ctx.moveTo(0, -r * 0.88);
   ctx.lineTo(r * 0.3, 0);
@@ -582,8 +523,6 @@ function drawRedGem(ctx: CanvasRenderingContext2D, r: number) {
   ctx.closePath();
   ctx.fillStyle = "rgba(255,100,150,0.15)";
   ctx.fill();
-
-  // Sparkle highlights
   const sparkles = [[-r * 0.18, -r * 0.35, r * 0.07], [r * 0.2, -r * 0.1, r * 0.05], [-r * 0.1, r * 0.15, r * 0.04]];
   for (const [sx, sy, sr] of sparkles) {
     ctx.beginPath();
@@ -591,20 +530,15 @@ function drawRedGem(ctx: CanvasRenderingContext2D, r: number) {
     ctx.fillStyle = "rgba(255,255,255,0.55)";
     ctx.fill();
   }
-
-  // Star sparkle
   drawStarSparkle(ctx, -r * 0.15, -r * 0.35, r * 0.12);
-
   drawGlossOverlay(ctx, r * 0.6, -0.3);
 }
 
 // ═══════════════════════════════════════════════════
-// GOLD COIN — engraved with dragon motif
+// GOLD COIN
 // ═══════════════════════════════════════════════════
 function drawGoldCoin(ctx: CanvasRenderingContext2D, r: number) {
   applyDropShadow(ctx, "rgba(180,130,20,0.4)", r * 0.18);
-
-  // Outer edge — thick metallic ring
   const edgeGrad = ctx.createLinearGradient(-r, -r * 0.3, r, r * 0.3);
   edgeGrad.addColorStop(0, "#8B6914");
   edgeGrad.addColorStop(0.3, "#DAA520");
@@ -616,8 +550,6 @@ function drawGoldCoin(ctx: CanvasRenderingContext2D, r: number) {
   ctx.fillStyle = edgeGrad;
   ctx.fill();
   clearShadow(ctx);
-
-  // Inner face
   const faceGrad = ctx.createRadialGradient(-r * 0.15, -r * 0.18, 0, 0, 0, r * 0.7);
   faceGrad.addColorStop(0, "#FFF8DC");
   faceGrad.addColorStop(0.3, "#FFE880");
@@ -627,15 +559,12 @@ function drawGoldCoin(ctx: CanvasRenderingContext2D, r: number) {
   ctx.arc(0, 0, r * 0.68, 0, Math.PI * 2);
   ctx.fillStyle = faceGrad;
   ctx.fill();
-
-  // Inner rim
   ctx.beginPath();
   ctx.arc(0, 0, r * 0.6, 0, Math.PI * 2);
   ctx.strokeStyle = "rgba(139,105,20,0.3)";
   ctx.lineWidth = r * 0.015;
   ctx.stroke();
-
-  // Dragon silhouette engraving
+  // Dragon engraving
   ctx.save();
   ctx.globalAlpha = 0.2;
   ctx.beginPath();
@@ -646,8 +575,6 @@ function drawGoldCoin(ctx: CanvasRenderingContext2D, r: number) {
   ctx.fillStyle = "#8B6914";
   ctx.fill();
   ctx.restore();
-
-  // Notch details around edge
   for (let i = 0; i < 24; i++) {
     const angle = (i / 24) * Math.PI * 2;
     const nx = Math.cos(angle) * r * 0.76;
@@ -657,15 +584,11 @@ function drawGoldCoin(ctx: CanvasRenderingContext2D, r: number) {
     ctx.fillStyle = "rgba(139,105,20,0.2)";
     ctx.fill();
   }
-
-  // Edge highlight arc
   ctx.beginPath();
   ctx.arc(0, 0, r * 0.8, -Math.PI * 0.7, -Math.PI * 0.15);
   ctx.strokeStyle = "rgba(255,255,255,0.2)";
   ctx.lineWidth = r * 0.025;
   ctx.stroke();
-
-  // Specular
   ctx.beginPath();
   ctx.ellipse(-r * 0.2, -r * 0.25, r * 0.15, r * 0.08, -0.3, 0, Math.PI * 2);
   ctx.fillStyle = "rgba(255,255,255,0.25)";
@@ -673,18 +596,18 @@ function drawGoldCoin(ctx: CanvasRenderingContext2D, r: number) {
 }
 
 // ═══════════════════════════════════════════════════
-// MOLTEN METAL LETTERS — A, K, Q, J, 10
+// GEOMETRIC LETTER HELPERS — all vector-path drawn
 // ═══════════════════════════════════════════════════
-function drawMoltenLetter(ctx: CanvasRenderingContext2D, r: number, letter: string, baseColor: string) {
-  // Background plate with inner shadow
+
+/** Draw a molten metal plate background for letter symbols */
+function drawLetterPlate(ctx: CanvasRenderingContext2D, r: number) {
   const plateGrad = ctx.createLinearGradient(-r * 0.5, -r * 0.5, r * 0.5, r * 0.5);
   plateGrad.addColorStop(0, "rgba(50,25,8,0.7)");
   plateGrad.addColorStop(0.5, "rgba(35,18,5,0.6)");
   plateGrad.addColorStop(1, "rgba(50,25,8,0.7)");
-  roundRectLocal(ctx, -r * 0.52, -r * 0.52, r * 1.04, r * 1.04, r * 0.15);
+  roundRectLocal(ctx, -r * 0.55, -r * 0.55, r * 1.1, r * 1.1, r * 0.15);
   ctx.fillStyle = plateGrad;
   ctx.fill();
-  // Plate inner shadow
   const innerShadow = ctx.createLinearGradient(0, -r * 0.5, 0, r * 0.5);
   innerShadow.addColorStop(0, "rgba(0,0,0,0.3)");
   innerShadow.addColorStop(0.2, "rgba(0,0,0,0)");
@@ -692,59 +615,204 @@ function drawMoltenLetter(ctx: CanvasRenderingContext2D, r: number, letter: stri
   innerShadow.addColorStop(1, "rgba(0,0,0,0.2)");
   ctx.fillStyle = innerShadow;
   ctx.fill();
-  // Plate border
   ctx.strokeStyle = "rgba(218,165,32,0.15)";
   ctx.lineWidth = r * 0.015;
   ctx.stroke();
+}
 
-  const fontSize = letter.length > 1 ? r * 0.95 : r * 1.15;
-  ctx.font = `900 ${fontSize}px 'Georgia', 'Times New Roman', serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+/** Apply molten metallic fill + stroke to current path */
+function fillMoltenPath(ctx: CanvasRenderingContext2D, r: number, baseColor: string) {
+  // Dark shadow offset
+  ctx.save();
+  ctx.translate(r * 0.025, r * 0.04);
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.fill();
+  ctx.restore();
 
-  // Drop shadow
-  ctx.fillStyle = "rgba(0,0,0,0.5)";
-  ctx.fillText(letter, r * 0.03, r * 0.08);
+  // Main metallic gradient fill
+  const grad = ctx.createLinearGradient(0, -r * 0.45, 0, r * 0.45);
+  grad.addColorStop(0, "#FFF0C0");
+  grad.addColorStop(0.2, baseColor);
+  grad.addColorStop(0.5, lightenColor(baseColor, 30));
+  grad.addColorStop(0.8, baseColor);
+  grad.addColorStop(1, darkenColor(baseColor, 40));
+  ctx.fillStyle = grad;
+  ctx.fill();
 
-  // Main letter — metallic gradient
-  const letterGrad = ctx.createLinearGradient(0, -r * 0.45, 0, r * 0.45);
-  letterGrad.addColorStop(0, "#FFF0C0");
-  letterGrad.addColorStop(0.2, baseColor);
-  letterGrad.addColorStop(0.5, lightenColor(baseColor, 30));
-  letterGrad.addColorStop(0.8, baseColor);
-  letterGrad.addColorStop(1, darkenColor(baseColor, 40));
-  ctx.fillStyle = letterGrad;
-  ctx.fillText(letter, 0, r * 0.05);
-
-  // Outline — dark edge for emboss effect
+  // Dark outline for emboss
   ctx.strokeStyle = darkenColor(baseColor, 50);
-  ctx.lineWidth = r * 0.025;
-  ctx.strokeText(letter, 0, r * 0.05);
+  ctx.lineWidth = r * 0.04;
+  ctx.stroke();
 
-  // Inner light stroke (emboss top)
+  // Inner light edge (emboss top)
   ctx.save();
   ctx.globalCompositeOperation = "screen";
   ctx.strokeStyle = "rgba(255,255,255,0.2)";
-  ctx.lineWidth = r * 0.015;
-  ctx.strokeText(letter, -r * 0.01, r * 0.03);
+  ctx.lineWidth = r * 0.02;
+  ctx.stroke();
   ctx.restore();
 
-  // Molten glow under letter
+  // Molten underglow
   applyDropShadow(ctx, baseColor, r * 0.15);
-  ctx.globalAlpha = 0.15;
+  ctx.globalAlpha = 0.12;
   ctx.fillStyle = baseColor;
-  ctx.fillText(letter, 0, r * 0.05);
+  ctx.fill();
   ctx.globalAlpha = 1;
   clearShadow(ctx);
 }
 
 // ═══════════════════════════════════════════════════
-// SCATTER — Dragon Egg
+// LETTER A — geometric vector path
+// ═══════════════════════════════════════════════════
+function drawLetterA(ctx: CanvasRenderingContext2D, r: number) {
+  drawLetterPlate(ctx, r);
+  const s = r * 0.75;
+  ctx.beginPath();
+  // Outer shape
+  ctx.moveTo(0, -s * 0.85);
+  ctx.lineTo(s * 0.5, s * 0.7);
+  ctx.lineTo(s * 0.35, s * 0.7);
+  ctx.lineTo(s * 0.22, s * 0.2);
+  ctx.lineTo(-s * 0.22, s * 0.2);
+  ctx.lineTo(-s * 0.35, s * 0.7);
+  ctx.lineTo(-s * 0.5, s * 0.7);
+  ctx.closePath();
+  // Cutout (counter)
+  ctx.moveTo(0, -s * 0.35);
+  ctx.lineTo(-s * 0.15, s * 0.05);
+  ctx.lineTo(s * 0.15, s * 0.05);
+  ctx.closePath();
+  fillMoltenPath(ctx, r, "#F0D060");
+  drawGlossOverlay(ctx, r * 0.4, -0.4);
+}
+
+// ═══════════════════════════════════════════════════
+// LETTER K — geometric vector path
+// ═══════════════════════════════════════════════════
+function drawLetterK(ctx: CanvasRenderingContext2D, r: number) {
+  drawLetterPlate(ctx, r);
+  const s = r * 0.7;
+  const w = s * 0.18;
+  // Vertical stem
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.35, -s * 0.8);
+  ctx.lineTo(-s * 0.35 + w, -s * 0.8);
+  ctx.lineTo(-s * 0.35 + w, s * 0.8);
+  ctx.lineTo(-s * 0.35, s * 0.8);
+  ctx.closePath();
+  fillMoltenPath(ctx, r, "#E0B840");
+  // Upper diagonal
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.35 + w, -s * 0.05);
+  ctx.lineTo(s * 0.4, -s * 0.8);
+  ctx.lineTo(s * 0.4 + w * 0.8, -s * 0.8);
+  ctx.lineTo(-s * 0.35 + w, s * 0.08);
+  ctx.closePath();
+  fillMoltenPath(ctx, r, "#E0B840");
+  // Lower diagonal
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.35 + w, s * 0.05);
+  ctx.lineTo(s * 0.42, s * 0.8);
+  ctx.lineTo(s * 0.42 + w * 0.8, s * 0.8);
+  ctx.lineTo(-s * 0.35 + w, -s * 0.08);
+  ctx.closePath();
+  fillMoltenPath(ctx, r, "#E0B840");
+  drawGlossOverlay(ctx, r * 0.4, -0.4);
+}
+
+// ═══════════════════════════════════════════════════
+// LETTER Q — geometric vector path
+// ═══════════════════════════════════════════════════
+function drawLetterQ(ctx: CanvasRenderingContext2D, r: number) {
+  drawLetterPlate(ctx, r);
+  const s = r * 0.65;
+  const thick = s * 0.18;
+  // Outer circle
+  ctx.beginPath();
+  ctx.arc(0, -s * 0.05, s * 0.6, 0, Math.PI * 2);
+  ctx.arc(0, -s * 0.05, s * 0.6 - thick, 0, Math.PI * 2, true);
+  ctx.closePath();
+  fillMoltenPath(ctx, r, "#D0A030");
+  // Tail
+  ctx.beginPath();
+  ctx.moveTo(s * 0.15, s * 0.3);
+  ctx.lineTo(s * 0.5, s * 0.75);
+  ctx.lineTo(s * 0.5 - thick * 0.7, s * 0.75);
+  ctx.lineTo(s * 0.15 - thick * 0.5, s * 0.35);
+  ctx.closePath();
+  fillMoltenPath(ctx, r, "#D0A030");
+  drawGlossOverlay(ctx, r * 0.4, -0.4);
+}
+
+// ═══════════════════════════════════════════════════
+// LETTER J — geometric vector path
+// ═══════════════════════════════════════════════════
+function drawLetterJ(ctx: CanvasRenderingContext2D, r: number) {
+  drawLetterPlate(ctx, r);
+  const s = r * 0.7;
+  const w = s * 0.2;
+  // Top bar
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.2, -s * 0.8);
+  ctx.lineTo(s * 0.35, -s * 0.8);
+  ctx.lineTo(s * 0.35, -s * 0.8 + w * 0.6);
+  ctx.lineTo(-s * 0.2, -s * 0.8 + w * 0.6);
+  ctx.closePath();
+  fillMoltenPath(ctx, r, "#C09028");
+  // Vertical stem
+  ctx.beginPath();
+  ctx.moveTo(s * 0.08, -s * 0.8);
+  ctx.lineTo(s * 0.08 + w, -s * 0.8);
+  ctx.lineTo(s * 0.08 + w, s * 0.35);
+  ctx.quadraticCurveTo(s * 0.08 + w, s * 0.7, -s * 0.08, s * 0.7);
+  ctx.quadraticCurveTo(-s * 0.35, s * 0.7, -s * 0.35, s * 0.4);
+  ctx.lineTo(-s * 0.35 + w, s * 0.4);
+  ctx.quadraticCurveTo(-s * 0.35 + w, s * 0.55, -s * 0.08, s * 0.55);
+  ctx.quadraticCurveTo(s * 0.08, s * 0.55, s * 0.08, s * 0.35);
+  ctx.closePath();
+  fillMoltenPath(ctx, r, "#C09028");
+  drawGlossOverlay(ctx, r * 0.4, -0.4);
+}
+
+// ═══════════════════════════════════════════════════
+// "10" — geometric numeral paths
+// ═══════════════════════════════════════════════════
+function drawLetter10(ctx: CanvasRenderingContext2D, r: number) {
+  drawLetterPlate(ctx, r);
+  const s = r * 0.6;
+  const w = s * 0.15;
+
+  // "1" — left side
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.38, -s * 0.55);
+  ctx.lineTo(-s * 0.2, -s * 0.8);
+  ctx.lineTo(-s * 0.2 + w, -s * 0.8);
+  ctx.lineTo(-s * 0.2 + w, s * 0.8);
+  ctx.lineTo(-s * 0.2, s * 0.8);
+  ctx.lineTo(-s * 0.2, -s * 0.55);
+  ctx.closePath();
+  // Base serif on 1
+  ctx.moveTo(-s * 0.38, s * 0.65);
+  ctx.lineTo(-s * 0.02, s * 0.65);
+  ctx.lineTo(-s * 0.02, s * 0.8);
+  ctx.lineTo(-s * 0.38, s * 0.8);
+  ctx.closePath();
+  fillMoltenPath(ctx, r, "#B08020");
+
+  // "0" — right side, oval ring
+  ctx.beginPath();
+  ctx.ellipse(s * 0.28, 0, s * 0.32, s * 0.72, 0, 0, Math.PI * 2);
+  ctx.ellipse(s * 0.28, 0, s * 0.32 - w, s * 0.72 - w, 0, 0, Math.PI * 2, true);
+  ctx.closePath();
+  fillMoltenPath(ctx, r, "#B08020");
+  drawGlossOverlay(ctx, r * 0.4, -0.4);
+}
+
+// ═══════════════════════════════════════════════════
+// SCATTER — Dragon Egg (no text at all)
 // ═══════════════════════════════════════════════════
 function drawScatter(ctx: CanvasRenderingContext2D, r: number) {
   applyDropShadow(ctx, "rgba(255,0,40,0.5)", r * 0.25);
-
-  // Egg body
   const eggGrad = ctx.createRadialGradient(-r * 0.1, -r * 0.15, 0, 0, r * 0.05, r * 0.8);
   eggGrad.addColorStop(0, "#FF6644");
   eggGrad.addColorStop(0.3, "#DD1122");
@@ -759,7 +827,7 @@ function drawScatter(ctx: CanvasRenderingContext2D, r: number) {
   ctx.lineWidth = r * 0.04;
   ctx.stroke();
 
-  // Scale pattern on egg
+  // Scale pattern
   ctx.save();
   ctx.globalAlpha = 0.08;
   for (let row = 0; row < 5; row++) {
@@ -774,7 +842,7 @@ function drawScatter(ctx: CanvasRenderingContext2D, r: number) {
   }
   ctx.restore();
 
-  // Cracks — glowing molten
+  // Molten cracks
   ctx.save();
   applyDropShadow(ctx, "#FF6600", 6);
   ctx.strokeStyle = "#FFAA00";
@@ -810,23 +878,20 @@ function drawScatter(ctx: CanvasRenderingContext2D, r: number) {
   ctx.fillStyle = "rgba(255,255,255,0.2)";
   ctx.fill();
 
-  // SCATTER text — rendered as styled graphic, not emoji
-  ctx.save();
-  applyDropShadow(ctx, "#FF4400", 5);
-  const textGrad = ctx.createLinearGradient(0, r * 0.55, 0, r * 0.75);
-  textGrad.addColorStop(0, "#FFE880");
-  textGrad.addColorStop(0.5, "#FFD700");
-  textGrad.addColorStop(1, "#CC8800");
-  ctx.fillStyle = textGrad;
-  ctx.font = `900 ${r * 0.26}px 'Arial Black', Arial, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("SCATTER", 0, r * 0.65);
-  ctx.strokeStyle = "#8B6914";
-  ctx.lineWidth = r * 0.012;
-  ctx.strokeText("SCATTER", 0, r * 0.65);
-  clearShadow(ctx);
-  ctx.restore();
+  // Geometric scatter indicator — three concentric flame rings instead of text
+  for (let i = 0; i < 3; i++) {
+    const ringR = r * (0.82 + i * 0.06);
+    ctx.beginPath();
+    ctx.arc(0, r * 0.05, ringR, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,${180 - i * 40},0,${0.25 - i * 0.06})`;
+    ctx.lineWidth = r * 0.015;
+    ctx.stroke();
+  }
+
+  // Small star sparkles around egg
+  drawStarSparkle(ctx, -r * 0.4, -r * 0.5, r * 0.08);
+  drawStarSparkle(ctx, r * 0.35, -r * 0.45, r * 0.06);
+  drawStarSparkle(ctx, r * 0.42, r * 0.3, r * 0.07);
 }
 
 // ═══════════════════════════════════════════════════
@@ -836,7 +901,6 @@ function drawStarSparkle(ctx: CanvasRenderingContext2D, x: number, y: number, si
   ctx.save();
   ctx.translate(x, y);
   ctx.fillStyle = "rgba(255,255,255,0.7)";
-  // Four-point star
   ctx.beginPath();
   ctx.moveTo(0, -size);
   ctx.lineTo(size * 0.15, -size * 0.15);
@@ -852,17 +916,17 @@ function drawStarSparkle(ctx: CanvasRenderingContext2D, x: number, y: number, si
 }
 
 function lightenColor(hex: string, amount: number): string {
-  const r = Math.min(255, parseInt(hex.slice(1, 3), 16) + amount);
-  const g = Math.min(255, parseInt(hex.slice(3, 5), 16) + amount);
-  const b = Math.min(255, parseInt(hex.slice(5, 7), 16) + amount);
-  return `rgb(${r},${g},${b})`;
+  const rv = Math.min(255, parseInt(hex.slice(1, 3), 16) + amount);
+  const gv = Math.min(255, parseInt(hex.slice(3, 5), 16) + amount);
+  const bv = Math.min(255, parseInt(hex.slice(5, 7), 16) + amount);
+  return `rgb(${rv},${gv},${bv})`;
 }
 
 function darkenColor(hex: string, amount: number): string {
-  const r = Math.max(0, parseInt(hex.slice(1, 3), 16) - amount);
-  const g = Math.max(0, parseInt(hex.slice(3, 5), 16) - amount);
-  const b = Math.max(0, parseInt(hex.slice(5, 7), 16) - amount);
-  return `rgb(${r},${g},${b})`;
+  const rv = Math.max(0, parseInt(hex.slice(1, 3), 16) - amount);
+  const gv = Math.max(0, parseInt(hex.slice(3, 5), 16) - amount);
+  const bv = Math.max(0, parseInt(hex.slice(5, 7), 16) - amount);
+  return `rgb(${rv},${gv},${bv})`;
 }
 
 function roundRectLocal(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, rad: number) {

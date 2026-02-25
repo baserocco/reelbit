@@ -39,7 +39,7 @@ const BASE_SPIN_DURATION = 1300;
 const REEL_DELAY = 170;
 const EXTRA_SYMBOLS = 22;
 const ANTICIPATION_EXTRA_DELAY = 1100;
-const BOUNCE_DURATION = 28;
+const BOUNCE_DURATION = 38;
 
 interface SlotCanvasProps {
   bet: number;
@@ -83,7 +83,7 @@ export default function SlotCanvas({
     if (!canvas) return;
     canvas.width = CANVAS_W * dpr;
     canvas.height = CANVAS_H * dpr;
-    ambientRef.current = createAmbientParticles(CANVAS_W, CANVAS_H, 50);
+    ambientRef.current = createAmbientParticles(CANVAS_W, CANVAS_H, 75);
   }, []);
 
   useEffect(() => {
@@ -342,14 +342,18 @@ export default function SlotCanvas({
 
           // Heavy motion blur
           const spinSpeed = progress < 0.65 ? Math.sin((progress / 0.65) * Math.PI) : 0;
-          if (progress > 0.02 && progress < 0.65) {
-            ctx.filter = `blur(${spinSpeed * 5}px)`;
-            // Fire speed lines
-            ctx.fillStyle = `rgba(255, 100, 0, ${spinSpeed * 0.06})`;
-            for (let sl = 0; sl < 4; sl++) {
+            if (progress > 0.02 && progress < 0.65) {
+            ctx.filter = `blur(${spinSpeed * 7}px)`;
+            // Fire speed lines — denser
+            ctx.fillStyle = `rgba(255, 100, 0, ${spinSpeed * 0.08})`;
+            for (let sl = 0; sl < 7; sl++) {
               const slx = rx + REEL_PADDING + Math.random() * (REEL_W - REEL_PADDING * 2);
-              ctx.fillRect(slx, reelAreaY, 1.5, VISIBLE_H);
+              ctx.fillRect(slx, reelAreaY, 1.5 + Math.random(), VISIBLE_H);
             }
+            // Hot white streak
+            ctx.fillStyle = `rgba(255, 200, 100, ${spinSpeed * 0.04})`;
+            const hotX = rx + REEL_W * 0.3 + Math.random() * REEL_W * 0.4;
+            ctx.fillRect(hotX, reelAreaY, 2, VISIBLE_H);
           }
 
           for (let i = 0; i < strip.length; i++) {
@@ -388,16 +392,18 @@ export default function SlotCanvas({
                     const px = FRAME_PAD + wr * (REEL_W + REEL_GAP) + REEL_W / 2;
                     const py = reelAreaY + w.positions[wr] * CELL_H + CELL_H / 2;
                     particlesRef.current.push(
-                      ...createWinParticles(px, py, 20, w.symbol.color)
+                      ...createWinParticles(px, py, 35, w.symbol.color)
                     );
                     bounceRef.current.set(`${wr}_${w.positions[wr]}`, 0);
                   }
                 }
 
                 if (totalWin >= bet * 10) {
-                  shakeRef.current = { active: true, intensity: 10, duration: 35, elapsed: 0 };
+                  shakeRef.current = { active: true, intensity: 16, duration: 45, elapsed: 0 };
                 } else if (totalWin >= bet * 3) {
-                  shakeRef.current = { active: true, intensity: 4, duration: 18, elapsed: 0 };
+                  shakeRef.current = { active: true, intensity: 7, duration: 25, elapsed: 0 };
+                } else {
+                  shakeRef.current = { active: true, intensity: 2.5, duration: 12, elapsed: 0 };
                 }
 
                 onWin(totalWin, totalWin >= bet * 20);
@@ -414,7 +420,7 @@ export default function SlotCanvas({
             reelBounceRef.current[r]++;
             if (bp < BOUNCE_DURATION) {
               const t = bp / BOUNCE_DURATION;
-              reelBounceOff = Math.sin(t * Math.PI * 3) * (1 - t) * 8;
+              reelBounceOff = Math.sin(t * Math.PI * 3.5) * (1 - t) * 14;
             } else {
               reelBounceRef.current[r] = -1;
             }
@@ -429,9 +435,9 @@ export default function SlotCanvas({
             if (bounceRef.current.has(bounceKey)) {
               const bp = bounceRef.current.get(bounceKey)!;
               bounceRef.current.set(bounceKey, bp + 1);
-              if (bp < 35) {
-                const t = bp / 35;
-                symbolBounce = Math.sin(t * Math.PI * 3) * (1 - t) * -14;
+              if (bp < 40) {
+                const t = bp / 40;
+                symbolBounce = Math.sin(t * Math.PI * 3.5) * (1 - t) * -18;
               } else {
                 bounceRef.current.delete(bounceKey);
               }
