@@ -22,6 +22,8 @@ export type Database = {
           created_at: string
           email: string
           id: string
+          referral_code: string | null
+          referred_by: string | null
           wallet: string | null
         }
         Insert: {
@@ -31,6 +33,8 @@ export type Database = {
           created_at?: string
           email: string
           id?: string
+          referral_code?: string | null
+          referred_by?: string | null
           wallet?: string | null
         }
         Update: {
@@ -40,9 +44,19 @@ export type Database = {
           created_at?: string
           email?: string
           id?: string
+          referral_code?: string | null
+          referred_by?: string | null
           wallet?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "waitlist_signups_referred_by_fkey"
+            columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "waitlist_signups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

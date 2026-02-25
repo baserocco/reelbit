@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { email, wallet } = await req.json();
+    const { email, wallet, ref } = await req.json();
 
     if (!email || typeof email !== "string") {
       return new Response(
@@ -22,7 +22,6 @@ serve(async (req) => {
       );
     }
 
-    // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email) || email.length > 255) {
       return new Response(
@@ -32,6 +31,7 @@ serve(async (req) => {
     }
 
     const sanitizedWallet = wallet ? String(wallet).slice(0, 100) : null;
+    const sanitizedRef = ref ? String(ref).slice(0, 20) : null;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -42,6 +42,17 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Look up referrer if ref code provided
+    let referrerId: string | null = null;
+    if (sanitizedRef) {
+      const { data: referrer } = await supabase
+        .from("waitlist_signups")
+        .select("id")
+        .eq("referral_code", sanitizedRef)
+        .maybeSingle();
+      referrerId = referrer?.id || null;
+    }
 
     // Check if email already exists
     const { data: existing } = await supabase
@@ -60,20 +71,19 @@ serve(async (req) => {
     let confirmationToken: string;
 
     if (existing) {
-      // Re-send confirmation for unconfirmed signup
       const newToken = crypto.randomUUID();
       await supabase
         .from("waitlist_signups")
-        .update({ confirmation_token: newToken, wallet: sanitizedWallet })
+        .update({ confirmation_token: newToken, wallet: sanitizedWallet, ...(referrerId ? { referred_by: referrerId } : {}) })
         .eq("id", existing.id);
       confirmationToken = newToken;
     } else {
-      // Create new signup
       const { data, error } = await supabase
         .from("waitlist_signups")
         .insert({
           email: email.toLowerCase().trim(),
           wallet: sanitizedWallet,
+          ...(referrerId ? { referred_by: referrerId } : {}),
         })
         .select("confirmation_token")
         .single();
@@ -85,7 +95,7 @@ serve(async (req) => {
       confirmationToken = data.confirmation_token;
     }
 
-    // Send confirmation email via Resend
+    // Send confirmation email
     const confirmUrl = `https://reelbit.lovable.app/confirm?token=${confirmationToken}`;
 
     const emailResponse = await fetch("https://api.resend.com/emails", {
@@ -97,7 +107,7 @@ serve(async (req) => {
       body: JSON.stringify({
         from: "ReelBit <noreply@reelbit.fun>",
         to: [email.toLowerCase().trim()],
-        subject: "Confirm your spot on the ReelBit waitlist 🎰",
+        subject: "Confirm your spot on the ReelBit waitlist",
         html: `
           <div style="background:#0A0A0A;color:#fff;padding:40px;font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
             <div style="text-align:center;margin-bottom:30px;">
@@ -105,7 +115,7 @@ serve(async (req) => {
               <p style="color:#888;font-size:14px;">Own Your Slot. Launch. Pump. Earn.</p>
             </div>
             <div style="background:#111;border:1px solid #222;border-radius:12px;padding:30px;text-align:center;">
-              <h2 style="color:#fff;margin-top:0;">Almost there! 🚀</h2>
+              <h2 style="color:#fff;margin-top:0;">Almost there!</h2>
               <p style="color:#aaa;line-height:1.6;">
                 Click the button below to confirm your email and secure your spot on the ReelBit waitlist.
               </p>
@@ -117,7 +127,7 @@ serve(async (req) => {
               </p>
             </div>
             <p style="color:#444;font-size:11px;text-align:center;margin-top:20px;">
-              © ReelBit — The future of creator-owned slots
+              &copy; ReelBit &mdash; The future of creator-owned slots
             </p>
           </div>
         `,
@@ -127,7 +137,6 @@ serve(async (req) => {
     if (!emailResponse.ok) {
       const errorData = await emailResponse.text();
       console.error("Resend error:", emailResponse.status, errorData);
-      // Still return success since the signup was saved
       return new Response(
         JSON.stringify({ 
           success: true, 

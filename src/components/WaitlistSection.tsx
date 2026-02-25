@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
 const BENEFITS = [
@@ -12,10 +13,12 @@ const BENEFITS = [
 ];
 
 const WaitlistSection = () => {
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [wallet, setWallet] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const refCode = searchParams.get("ref");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,14 +28,14 @@ const WaitlistSection = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke("waitlist-signup", {
-        body: { email, wallet },
+        body: { email, wallet, ref: refCode },
       });
 
       if (error) throw error;
 
       if (data?.error) {
         if (data.error.includes("already on the waitlist")) {
-          setMessage("You're already confirmed! 🎉");
+          setMessage("You're already confirmed!");
           setStatus("success");
         } else {
           setMessage(data.error);
