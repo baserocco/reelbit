@@ -67,7 +67,18 @@ serve(async (req) => {
       );
     }
 
-    const sanitizedWallet = wallet ? String(wallet).slice(0, 100) : null;
+    let sanitizedWallet: string | null = null;
+    if (wallet) {
+      const walletStr = String(wallet).trim();
+      const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+      if (!solanaAddressRegex.test(walletStr)) {
+        return new Response(
+          JSON.stringify({ error: "Invalid Solana wallet address format" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      sanitizedWallet = walletStr;
+    }
     const sanitizedRef = ref ? String(ref).slice(0, 20) : null;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -99,9 +110,10 @@ serve(async (req) => {
       .maybeSingle();
 
     if (existing?.confirmed) {
+      // Return same success message to prevent email enumeration
       return new Response(
-        JSON.stringify({ error: "This email is already on the waitlist!" }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: true, message: "Check your email to confirm your spot!", emailSent: false }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
