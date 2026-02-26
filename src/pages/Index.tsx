@@ -4,6 +4,7 @@ import HeroSection from "@/components/HeroSection";
 import ProblemSection from "@/components/ProblemSection";
 import SolutionSection from "@/components/SolutionSection";
 import WaitlistSection from "@/components/WaitlistSection";
+import FAQSection from "@/components/FAQSection";
 import Footer from "@/components/Footer";
 
 const SlotDemoSection = lazy(() => import("@/components/SlotDemoSection"));
@@ -35,6 +36,8 @@ const Index = () => {
         </Suspense>
         <div className="section-divider" />
         <WaitlistSection />
+        <div className="section-divider" />
+        <FAQSection />
       </main>
       <Footer />
     </div>

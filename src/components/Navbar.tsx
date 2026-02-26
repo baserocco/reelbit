@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import reelbitLogo from "@/assets/reelbit-logo.jpeg";
+import reelbitLogo from "@/assets/reelbit-logo.png";
 
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
