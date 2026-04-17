@@ -1,73 +1,89 @@
-# Welcome to your Lovable project
+# ReelBit
 
-## Project info
+Two-domain crypto gambling ecosystem on Solana.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+- **reelbit.fun** — Slot machine token launchpad (like pump.fun but for slots)
+- **reelbit.casino** — Casino where graduated slots go live
 
-## How can I edit this code?
+## How It Works
 
-There are several ways of editing your application.
+Users deploy slot machine tokens on reelbit.fun. Each slot has an SPL token on Solana trading on a Meteora DLMM bonding curve starting at $5k MCap. When it hits $100k MCap it graduates — AI generates the full slot theme and the slot goes live on reelbit.casino. Token holders earn revenue share from both trading fees and casino play forever.
 
-**Use Lovable**
+## Key Rules
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- Players **never** pay fees. Zero. Revenue = house edge only (96% RTP).
+- Slot engine runs **off-chain** (game server). Only deposits/withdrawals/trading on-chain.
+- **96% RTP** fixed on all slots.
+- **Free deployment** for creators.
 
-Changes made via Lovable will be committed automatically to this repo.
+## Monorepo Structure
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+reelbit/
+├── programs/               # Anchor (Solana) smart contracts
+│   ├── token-launch/       # SPL token + DLMM pool creation
+│   ├── graduation-detector/# MCap monitor + graduation sequence
+│   ├── lp-vault/           # LP position custody
+│   ├── harvester/          # Fee claiming + routing
+│   ├── distribution/       # 25/25/20/15/15 split
+│   ├── shareholder-pool/   # Claimable earnings across all slots
+│   ├── jackpot-pool/       # VRF-verified jackpot
+│   ├── casino-grr-vault/   # Player deposit custody
+│   └── legal-reserve/      # Squads 3/5 multisig reserve
+├── apps/
+│   ├── fun/                # reelbit.fun (Next.js 14)
+│   └── casino/             # reelbit.casino (Next.js 14)
+├── packages/
+│   ├── shared/             # Shared types, constants, utilities
+│   └── ui/                 # Shared UI components
+├── backend/
+│   ├── game-server/        # Fastify — sessions, balances, RNG
+│   ├── ai-pipeline/        # Graduation → themed slot generation
+│   └── indexer/            # Helius webhooks → PostgreSQL
+└── scripts/                # Devnet setup, deployment helpers
 ```
 
-**Edit a file directly in GitHub**
+## Revenue Split (Trading Fees + Casino GGR — same everywhere)
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+| Recipient | Share |
+|-----------|-------|
+| Platform wallet | 25% |
+| Creator wallet | 25% |
+| Shareholder claimable pool | 20% |
+| Jackpot pool | 15% |
+| Legal reserve multisig | 15% |
 
-**Use GitHub Codespaces**
+## Build Order (8 Sprints)
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+| Sprint | Weeks | Focus |
+|--------|-------|-------|
+| 1 | 1–4 | Token Launch + DLMM + Distribution programs |
+| 2 | 3–6 | reelbit.fun frontend |
+| 3 | 5–8 | Graduation + AMM migration + all vaults |
+| 4 | 7–10 | PixiJS slot engine (3 models) |
+| 5 | 9–12 | AI generation pipeline |
+| 6 | 11–14 | reelbit.casino |
+| 7 | 13–16 | Integration + shareholder dashboard |
+| 8 | 15–18 | Security audit + mainnet |
 
-## What technologies are used for this project?
+## Tech Stack
 
-This project is built with:
+| Layer | Technology |
+|-------|-----------|
+| Blockchain | Solana + Anchor 0.30.x |
+| AMM | Meteora DLMM → Dynamic AMM |
+| Auth | Privy |
+| Frontend | Next.js 14 + Tailwind + Framer Motion |
+| Slot Engine | PixiJS (WebGL, off-chain) |
+| Backend | Node.js + Fastify |
+| Database | PostgreSQL (Supabase) + Redis |
+| Indexer | Helius webhooks |
+| AI | GPT-4o Vision + Flux/DALL-E 3 |
+| RNG | Provably fair + Switchboard VRF |
+| Storage | Arweave/Irys + IPFS/Pinata |
+| CDN | Cloudflare |
+| Support | Claude API |
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Status
 
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+**Sprint 1 in progress** — Token Launch Program (Anchor)

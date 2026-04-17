@@ -1,0 +1,37 @@
+[features]
+seeds = false
+skip-lint = false
+
+[programs.localnet]
+token_launch = "TokenLaunch111111111111111111111111111111111"
+graduation_detector = "GradDetect1111111111111111111111111111111111"
+lp_vault = "LpVault111111111111111111111111111111111111"
+harvester = "Harvester1111111111111111111111111111111111"
+distribution = "Distrib111111111111111111111111111111111111"
+shareholder_pool = "SharePool1111111111111111111111111111111111"
+jackpot_pool = "JackpotPool111111111111111111111111111111111"
+casino_grr_vault = "CasinoGRR1111111111111111111111111111111111"
+legal_reserve = "LegalReserv11111111111111111111111111111111"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+
+[workspace]
+members = [
+  "programs/token-launch",
+  "programs/graduation-detector",
+  "programs/lp-vault",
+  "programs/harvester",
+  "programs/distribution",
+  "programs/shareholder-pool",
+  "programs/jackpot-pool",
+  "programs/casino-grr-vault",
+  "programs/legal-reserve"
+]
