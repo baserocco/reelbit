@@ -5,8 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
-// Privy app IDs start with "cl" — skip provider during SSG/CI if placeholder
-const PRIVY_VALID = PRIVY_APP_ID.startsWith("cl");
+const PRIVY_VALID = PRIVY_APP_ID.length > 10;
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
