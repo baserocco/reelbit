@@ -61,3 +61,25 @@ export function walletCapPda(mint: PublicKey, wallet: PublicKey): [PublicKey, nu
     new PublicKey(PROGRAM_IDS.tokenLaunch),
   );
 }
+
+export function metadataPda(mint: PublicKey): [PublicKey, number] {
+  const TOKEN_METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("metadata"), TOKEN_METADATA_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+    TOKEN_METADATA_PROGRAM_ID,
+  );
+}
+
+export function feeVaultPda(mint: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("fee_vault"), mint.toBuffer()],
+    new PublicKey(PROGRAM_IDS.tokenLaunch),
+  );
+}
+
+export function jackpotVaultPda(mint: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("jackpot_vault"), mint.toBuffer()],
+    new PublicKey(PROGRAM_IDS.tokenLaunch),
+  );
+}

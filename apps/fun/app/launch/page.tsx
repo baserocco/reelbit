@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
+import type { AnchorWallet } from "@solana/wallet-adapter-react";
+import { launchSlot } from "@/lib/tokenLaunch";
 import { Upload, Rocket, CheckCircle, Info, ChevronRight, Sparkles } from "lucide-react";
 import { BondingCurveChart } from "@/components/chart/BondingCurveChart";
 import { cn } from "@/lib/utils";
@@ -30,10 +32,12 @@ const HOW_IT_WORKS = [
 
 export default function LaunchPage() {
   const { authenticated, login } = usePrivy();
+  const { wallets } = useWallets();
   const [step, setStep] = useState<Step>("form");
   const [form, setForm] = useState<FormData>(EMPTY);
   const [errors, setErrors] = useState<Partial<FormData>>({});
   const [mintAddress, setMintAddress] = useState("");
+  const [launchError, setLaunchError] = useState<string | null>(null);
 
   function validate(): boolean {
     const e: Partial<FormData> = {};
@@ -53,10 +57,24 @@ export default function LaunchPage() {
   }
 
   async function confirmLaunch() {
+    if (!wallets[0]) { setStep("form"); return; }
     setStep("launching");
-    await new Promise((r) => setTimeout(r, 2500));
-    setMintAddress("So11111111111111111111111111111111111111112");
-    setStep("success");
+    setLaunchError(null);
+    try {
+      const wallet = wallets[0] as unknown as AnchorWallet;
+      const result = await launchSlot(wallet, {
+        name:        form.name,
+        ticker:      form.ticker.toUpperCase(),
+        imageUri:    form.imageUri,
+        description: form.description,
+        model:       form.model,
+      });
+      setMintAddress(result.mint);
+      setStep("success");
+    } catch (e) {
+      setLaunchError((e as Error).message);
+      setStep("preview");
+    }
   }
 
   return (
@@ -196,6 +214,11 @@ export default function LaunchPage() {
                     </div>
                   ))}
                 </div>
+                {launchError && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+                    <p className="text-xs font-rajdhani text-red-300 leading-relaxed">{launchError}</p>
+                  </div>
+                )}
                 <div className="bg-purple-500/8 border border-purple-500/20 rounded-xl p-4">
                   <p className="text-xs font-rajdhani text-purple-300/80 leading-relaxed">
                     This will send a transaction to the <strong>ReelBit Token Launch</strong> program on Solana devnet.

@@ -9,6 +9,7 @@ export interface SlotTheme {
   tokenSymbol: string;
   slotModel: SlotModel;
   graduated: boolean;
+  poolAddress?: string; // Meteora DLMM LB pair address (set after graduation migration)
   status: "generating" | "ready" | "failed";
   heroImageUrl: string | null;
   bgImageUrl: string | null;
@@ -52,6 +53,21 @@ export function markGraduated(mint: string, slotModel: SlotModel): void {
     store[mint].updatedAt = Date.now();
     writeStore(store);
   }
+}
+
+export function recordPoolAddress(mint: string, poolAddress: string): void {
+  const store = readStore();
+  if (store[mint]) {
+    store[mint].poolAddress = poolAddress;
+    store[mint].updatedAt   = Date.now();
+    writeStore(store);
+  }
+}
+
+export function getGraduatedWithPool(): SlotTheme[] {
+  return Object.values(readStore()).filter(
+    (t) => t.graduated && t.poolAddress != null,
+  );
 }
 
 export function setTheme(theme: SlotTheme): void {

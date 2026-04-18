@@ -1,15 +1,28 @@
 import express, { Request, Response, NextFunction } from "express";
 import path from "path";
-import { Connection } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { config } from "./config";
 import { extractTokenLaunchEvents } from "./decoder";
 import { handleGraduation } from "./migration";
-import { getAllThemes, getTheme, getGraduatedThemes } from "./themeStore";
+import { getAllThemes, getTheme, getGraduatedThemes, setTheme, deriveColors } from "./themeStore";
+import type { SlotModel } from "./themeStore";
 import { triggerThemeGeneration } from "./slotTheme";
 import { getBalance, credit, debit, transfer, isSeenDeposit, markDepositSeen } from "./balanceStore";
 import { getHouseWalletAddress, sendSol, verifyDepositTx } from "./houseWallet";
 import { getProfile, createProfile, updateProfile, getProfileByUserId, savePfpFile } from "./profileStore";
 import type { HeliusWebhookPayload } from "./types";
+import {
+  fetchBondingCurveState,
+  buildBuyInstruction,
+  buildSellInstruction,
+  buildUnsignedTx,
+  calcTokensOut,
+  calcSolOut,
+  mcapSol,
+  pricePerToken,
+} from "./tradingApi";
+import { startDistributionCron, FEE_SPLIT } from "./distributionCron";
+import { startLpHarvestCron } from "./lpHarvestCron";
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -140,6 +153,57 @@ app.get("/house-wallet", (_req: Request, res: Response) => {
   res.json({ address: getHouseWalletAddress() });
 });
 
+// ── Metaplex token metadata JSON ──────────────────────────────────────────────
+// Served as the `metadata_uri` during launch_slot so tokens appear in all wallets/DEXes.
+
+app.get("/metadata/:mint", (req: Request, res: Response) => {
+  const theme = getTheme(req.params.mint);
+  if (!theme) return res.status(404).json({ error: "Token not found" });
+  res.setHeader("Cache-Control", "public, max-age=60");
+  res.json({
+    name: theme.tokenName,
+    symbol: theme.tokenSymbol,
+    description: `${theme.tokenName} ($${theme.tokenSymbol}) — a slot token on ReelBit. Trade on reelbit.fun`,
+    image: theme.heroImageUrl ?? "",
+    external_url: `https://reelbit.fun/slot/${req.params.mint}`,
+    attributes: [
+      { trait_type: "Slot Model", value: theme.slotModel },
+      { trait_type: "Platform", value: "ReelBit" },
+      { trait_type: "Graduated", value: theme.graduated ? "Yes" : "No" },
+    ],
+  });
+});
+
+// Pre-register a token before launch so /metadata/:mint is ready for the Metaplex URI
+app.post("/themes/register", (req: Request, res: Response) => {
+  const { mint, tokenName, tokenSymbol, imageUri, description, model } = req.body as {
+    mint: string; tokenName: string; tokenSymbol: string;
+    imageUri?: string; description?: string; model?: string;
+  };
+  if (!mint || !tokenName || !tokenSymbol) {
+    return res.status(400).json({ error: "mint, tokenName, tokenSymbol required" });
+  }
+  const existing = getTheme(mint);
+  if (existing) return res.json(existing);
+
+  const colors = deriveColors(tokenSymbol);
+  const theme = {
+    mint,
+    tokenName,
+    tokenSymbol,
+    slotModel: (model ?? "Classic3Reel") as SlotModel,
+    graduated: false,
+    status: "generating" as const,
+    heroImageUrl: imageUri ?? null,
+    bgImageUrl: null,
+    primaryColor: colors.primary,
+    accentColor: colors.accent,
+    updatedAt: Date.now(),
+  };
+  setTheme(theme);
+  res.status(201).json(theme);
+});
+
 // ── Balance endpoints ─────────────────────────────────────────────────────────
 
 app.get("/balance/:wallet", (req: Request, res: Response) => {
@@ -264,6 +328,167 @@ app.post("/webhooks/helius", async (req: Request, res: Response) => {
   }
 });
 
+// ── Fee info ──────────────────────────────────────────────────────────────────
+// Returns current fee architecture so frontends can display it accurately.
+
+app.get("/fees/info", (_req: Request, res: Response) => {
+  res.json({
+    prebond: {
+      tiers: [
+        { progressPct: "0–20",  feeBps: 200, feeDisplay: "2.0%" },
+        { progressPct: "20–60", feeBps: 150, feeDisplay: "1.5%" },
+        { progressPct: "60–100",feeBps: 100, feeDisplay: "1.0%" },
+      ],
+      description: "Fee rate decreases as token approaches graduation — rewards the final push",
+    },
+    postbond: {
+      source: "Meteora DLMM dynamic LP fees",
+      description: "LP fees harvested every 24h and split via same structure",
+    },
+    split: FEE_SPLIT,
+    distributionInterval: "30 minutes (minimum)",
+    distributionThreshold: "0.05 SOL minimum to trigger distribution",
+    jackpotExpiry: {
+      days: 30,
+      rule: "If token does not graduate within 30 days, the 30% jackpot allocation redirects to platform. Creator still receives 25% indefinitely.",
+    },
+    graduation: {
+      threshold: "85 SOL in bonding curve vault",
+      platformSponsorship: "Platform tops up jackpot to minimum $3,000 USD value if 30-day window elapsed before graduation",
+    },
+  });
+});
+
+// ── Pre-graduation trading API (pump.fun-compatible) ─────────────────────────
+//
+// Trading terminals (Photon, Bullx, Trojan, BonkBot) call these endpoints to
+// discover tokens and build transactions they sign + submit directly.
+//
+// GET  /tokens              — list all bonding-curve tokens with price/mcap
+// GET  /tokens/:mint        — single token with live on-chain curve state
+// POST /tokens/:mint/buy    — returns unsigned base64 tx (caller signs + sends)
+// POST /tokens/:mint/sell   — returns unsigned base64 tx (caller signs + sends)
+
+app.get("/tokens", (_req: Request, res: Response) => {
+  const themes = getAllThemes().filter((t) => !t.graduated);
+  res.json(themes.map((t) => ({
+    mint:        t.mint,
+    name:        t.tokenName,
+    symbol:      t.tokenSymbol,
+    model:       t.slotModel,
+    image:       t.heroImageUrl ?? "",
+    graduated:   t.graduated,
+    metadataUri: `${config.serverBaseUrl}/metadata/${t.mint}`,
+    program:     config.tokenLaunchProgramId,
+  })));
+});
+
+app.get("/tokens/:mint", async (req: Request, res: Response) => {
+  const { mint: mintStr } = req.params;
+  let mint: PublicKey;
+  try { mint = new PublicKey(mintStr); } catch { return res.status(400).json({ error: "Invalid mint address" }); }
+
+  const theme = getTheme(mintStr);
+  if (!theme) return res.status(404).json({ error: "Token not found" });
+
+  const curve = await fetchBondingCurveState(connection, mint);
+  const vs = curve?.virtualSol   ?? BigInt(30 * 1_000_000_000);
+  const vt = curve?.virtualTokens ?? BigInt("1073000191000000");
+  const rs = curve?.realSol      ?? 0n;
+
+  res.json({
+    mint:           mintStr,
+    name:           theme.tokenName,
+    symbol:         theme.tokenSymbol,
+    model:          theme.slotModel,
+    image:          theme.heroImageUrl ?? "",
+    description:    `${theme.tokenName} ($${theme.tokenSymbol}) — slot token on ReelBit`,
+    graduated:      theme.graduated,
+    metadataUri:    `${config.serverBaseUrl}/metadata/${mintStr}`,
+    program:        config.tokenLaunchProgramId,
+    bondingCurve: curve ? {
+      creator:       curve.creator.toBase58(),
+      virtualSol:    curve.virtualSol.toString(),
+      virtualTokens: curve.virtualTokens.toString(),
+      realSol:       curve.realSol.toString(),
+      realTokens:    curve.realTokens.toString(),
+      pricePerTokenSol:  pricePerToken(vs, vt),
+      mcapSol:           mcapSol(vs, vt),
+      progressPct:       Math.min(100, Math.round(Number(rs) / 85_000_000_000 * 100)),
+    } : null,
+  });
+});
+
+/**
+ * Build an unsigned buy transaction.
+ * Body: { wallet: string, solAmount: string|number, slippageBps?: number }
+ * Returns: { transaction: "<base64>", tokensOut: string, minTokensOut: string }
+ */
+app.post("/tokens/:mint/buy", async (req: Request, res: Response) => {
+  const { mint: mintStr } = req.params;
+  const { wallet, solAmount, slippageBps = 100 } = req.body as {
+    wallet: string; solAmount: string | number; slippageBps?: number;
+  };
+
+  if (!wallet || !solAmount) return res.status(400).json({ error: "wallet and solAmount required" });
+
+  let mint: PublicKey;
+  let buyer: PublicKey;
+  try { mint = new PublicKey(mintStr); buyer = new PublicKey(wallet); }
+  catch { return res.status(400).json({ error: "Invalid mint or wallet address" }); }
+
+  const solLamports = BigInt(Math.round(Number(solAmount)));
+  if (solLamports <= 0n) return res.status(400).json({ error: "solAmount must be positive" });
+
+  const curve = await fetchBondingCurveState(connection, mint);
+  if (!curve) return res.status(404).json({ error: "Bonding curve not found for this mint" });
+  if (curve.graduated) return res.status(400).json({ error: "Token has graduated — trade on DEX" });
+
+  const tokensOut    = calcTokensOut(curve.virtualSol, curve.virtualTokens, solLamports);
+  const minTokensOut = (tokensOut * BigInt(10_000 - slippageBps)) / 10_000n;
+
+  const ix = buildBuyInstruction(mint, buyer, curve.creator, solLamports, minTokensOut);
+  const transaction = await buildUnsignedTx(connection, ix, buyer);
+
+  res.json({ transaction, tokensOut: tokensOut.toString(), minTokensOut: minTokensOut.toString() });
+});
+
+/**
+ * Build an unsigned sell transaction.
+ * Body: { wallet: string, tokenAmount: string|number, slippageBps?: number }
+ * Returns: { transaction: "<base64>", solOut: string, minSolOut: string }
+ */
+app.post("/tokens/:mint/sell", async (req: Request, res: Response) => {
+  const { mint: mintStr } = req.params;
+  const { wallet, tokenAmount, slippageBps = 100 } = req.body as {
+    wallet: string; tokenAmount: string | number; slippageBps?: number;
+  };
+
+  if (!wallet || !tokenAmount) return res.status(400).json({ error: "wallet and tokenAmount required" });
+
+  let mint: PublicKey;
+  let seller: PublicKey;
+  try { mint = new PublicKey(mintStr); seller = new PublicKey(wallet); }
+  catch { return res.status(400).json({ error: "Invalid mint or wallet address" }); }
+
+  const rawTokens = BigInt(Math.round(Number(tokenAmount)));
+  if (rawTokens <= 0n) return res.status(400).json({ error: "tokenAmount must be positive" });
+
+  const curve = await fetchBondingCurveState(connection, mint);
+  if (!curve) return res.status(404).json({ error: "Bonding curve not found for this mint" });
+  if (curve.graduated) return res.status(400).json({ error: "Token has graduated — trade on DEX" });
+
+  const grossSol  = calcSolOut(curve.virtualSol, curve.virtualTokens, rawTokens);
+  const creatorFee = (grossSol * 50n) / 10_000n;
+  const netSol    = grossSol - creatorFee * 2n;
+  const minSolOut = (netSol * BigInt(10_000 - slippageBps)) / 10_000n;
+
+  const ix = buildSellInstruction(mint, seller, curve.creator, rawTokens, minSolOut);
+  const transaction = await buildUnsignedTx(connection, ix, seller);
+
+  res.json({ transaction, solOut: netSol.toString(), minSolOut: minSolOut.toString() });
+});
+
 // ── Error handler ─────────────────────────────────────────────────────────────
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
@@ -273,4 +498,6 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 
 app.listen(config.port, () => {
   console.log(`[api] ReelBit API running on port ${config.port}`);
+  startDistributionCron(connection);
+  startLpHarvestCron(connection);
 });

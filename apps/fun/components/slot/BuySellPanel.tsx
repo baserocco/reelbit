@@ -21,13 +21,14 @@ import type { SlotToken } from "@/types/slot";
 interface Props {
   slot: SlotToken;
   solPrice?: number;
+  onTradeComplete?: () => void;
 }
 
 type Mode = "buy" | "sell";
 
 const QUICK_AMOUNTS_SOL = [0.1, 0.5, 1, 5];
 
-export function BuySellPanel({ slot }: Props) {
+export function BuySellPanel({ slot, onTradeComplete }: Props) {
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
   const [mode, setMode] = useState<Mode>("buy");
@@ -82,7 +83,6 @@ export function BuySellPanel({ slot }: Props) {
         const lamports = BigInt(Math.floor(numAmount * LAMPORTS_PER_SOL));
         const { signature } = await buyTokens(wallet, mint, lamports);
         setTxSig(signature);
-        // Refresh curve state
         const updated = await fetchBondingCurve(wallet, mint);
         if (updated) setCurve(updated);
       } else {
@@ -92,6 +92,7 @@ export function BuySellPanel({ slot }: Props) {
         const updated = await fetchBondingCurve(wallet, mint);
         if (updated) setCurve(updated);
       }
+      onTradeComplete?.();
 
       setAmount("");
     } catch (err: unknown) {

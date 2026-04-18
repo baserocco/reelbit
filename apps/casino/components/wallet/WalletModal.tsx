@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Copy, Check, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Wallet, Loader2, ExternalLink } from "lucide-react";
+import { X, Copy, Check, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Wallet, ExternalLink } from "lucide-react";
+import { SwipeToConfirm } from "@/components/wallet/SwipeToConfirm";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { cn } from "@/lib/utils";
 import {
@@ -27,7 +28,6 @@ export function WalletModal({ open, onClose, walletAddress, onBalanceChange }: P
   const [balance, setBalance] = useState(0);
   const [houseWallet, setHouseWallet] = useState("");
   const [copied, setCopied] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   // deposit
@@ -60,51 +60,30 @@ export function WalletModal({ open, onClose, walletAddress, onBalanceChange }: P
   }
 
   async function handleDeposit() {
-    if (!depositTxSig.trim()) { setMsg({ text: "Paste your transaction signature.", ok: false }); return; }
-    setLoading(true); setMsg(null);
-    try {
-      const { deposited, balance: newBal } = await confirmDeposit(depositTxSig.trim(), walletAddress);
-      setBalance(newBal);
-      onBalanceChange?.(newBal);
-      setMsg({ text: `✅ Deposited ${(deposited / LAMPORTS_PER_SOL).toFixed(4)} SOL. Balance: ${(newBal / LAMPORTS_PER_SOL).toFixed(4)} SOL`, ok: true });
-      setDepositTxSig("");
-    } catch (e) {
-      setMsg({ text: (e as Error).message, ok: false });
-    } finally { setLoading(false); }
+    const { deposited, balance: newBal } = await confirmDeposit(depositTxSig.trim(), walletAddress);
+    setBalance(newBal);
+    onBalanceChange?.(newBal);
+    setMsg({ text: `Deposited ${(deposited / LAMPORTS_PER_SOL).toFixed(4)} SOL. Balance: ${(newBal / LAMPORTS_PER_SOL).toFixed(4)} SOL`, ok: true });
+    setDepositTxSig("");
   }
 
   async function handleWithdraw() {
     const lamports = Math.floor(parseFloat(withdrawAmt) * LAMPORTS_PER_SOL);
-    if (!lamports || lamports <= 0) { setMsg({ text: "Enter a valid amount.", ok: false }); return; }
-    if (lamports > balance) { setMsg({ text: "Insufficient balance.", ok: false }); return; }
     const dest = withdrawDest.trim() || walletAddress;
-    setLoading(true); setMsg(null);
-    try {
-      const { txSignature, balance: newBal } = await requestWithdraw(walletAddress, lamports, dest);
-      setBalance(newBal);
-      onBalanceChange?.(newBal);
-      setMsg({ text: `✅ Withdrew ${withdrawAmt} SOL. Tx: ${txSignature.slice(0, 16)}…`, ok: true });
-      setWithdrawAmt("");
-    } catch (e) {
-      setMsg({ text: (e as Error).message, ok: false });
-    } finally { setLoading(false); }
+    const { txSignature, balance: newBal } = await requestWithdraw(walletAddress, lamports, dest);
+    setBalance(newBal);
+    onBalanceChange?.(newBal);
+    setMsg({ text: `Withdrew ${withdrawAmt} SOL. Tx: ${txSignature.slice(0, 16)}…`, ok: true });
+    setWithdrawAmt("");
   }
 
   async function handleTransfer() {
     const lamports = Math.floor(parseFloat(transferAmt) * LAMPORTS_PER_SOL);
-    if (!transferTo.trim()) { setMsg({ text: "Enter the recipient's User ID.", ok: false }); return; }
-    if (!lamports || lamports <= 0) { setMsg({ text: "Enter a valid amount.", ok: false }); return; }
-    if (lamports > balance) { setMsg({ text: "Insufficient balance.", ok: false }); return; }
-    setLoading(true); setMsg(null);
-    try {
-      const { balance: newBal, recipient } = await requestTransfer(walletAddress, transferTo.trim(), lamports);
-      setBalance(newBal);
-      onBalanceChange?.(newBal);
-      setMsg({ text: `✅ Sent ${transferAmt} SOL to ${recipient.username} (#${recipient.userId})`, ok: true });
-      setTransferAmt(""); setTransferTo("");
-    } catch (e) {
-      setMsg({ text: (e as Error).message, ok: false });
-    } finally { setLoading(false); }
+    const { balance: newBal, recipient } = await requestTransfer(walletAddress, transferTo.trim(), lamports);
+    setBalance(newBal);
+    onBalanceChange?.(newBal);
+    setMsg({ text: `Sent ${transferAmt} SOL to ${recipient.username} (#${recipient.userId})`, ok: true });
+    setTransferAmt(""); setTransferTo("");
   }
 
   const solBalance = (balance / LAMPORTS_PER_SOL).toFixed(4);
@@ -219,14 +198,13 @@ export function WalletModal({ open, onClose, walletAddress, onBalanceChange }: P
                       placeholder="Paste tx signature here…"
                       className="input-casino text-xs font-mono"
                     />
-                    <button
-                      onClick={handleDeposit}
-                      disabled={loading || !depositTxSig.trim()}
-                      className="btn-launch w-full py-3 flex items-center justify-center gap-2 disabled:opacity-40"
-                    >
-                      {loading ? <Loader2 size={14} className="animate-spin" /> : <ArrowDownToLine size={14} />}
-                      Verify Deposit
-                    </button>
+                    <SwipeToConfirm
+                      label="SWIPE TO VERIFY DEPOSIT"
+                      variant="purple"
+                      onConfirm={handleDeposit}
+                      onError={(e) => setMsg({ text: e.message, ok: false })}
+                      disabled={!depositTxSig.trim()}
+                    />
                   </div>
                 </div>
               )}
@@ -270,14 +248,13 @@ export function WalletModal({ open, onClose, walletAddress, onBalanceChange }: P
                     />
                   </div>
 
-                  <button
-                    onClick={handleWithdraw}
-                    disabled={loading || !withdrawAmt || parseFloat(withdrawAmt) <= 0}
-                    className="btn-launch w-full py-3 flex items-center justify-center gap-2 disabled:opacity-40"
-                  >
-                    {loading ? <Loader2 size={14} className="animate-spin" /> : <ArrowUpFromLine size={14} />}
-                    Withdraw
-                  </button>
+                  <SwipeToConfirm
+                    label="SWIPE TO WITHDRAW"
+                    variant="gold"
+                    onConfirm={handleWithdraw}
+                    onError={(e) => setMsg({ text: e.message, ok: false })}
+                    disabled={!withdrawAmt || parseFloat(withdrawAmt) <= 0}
+                  />
                 </div>
               )}
 
@@ -321,14 +298,13 @@ export function WalletModal({ open, onClose, walletAddress, onBalanceChange }: P
                     </div>
                   </div>
 
-                  <button
-                    onClick={handleTransfer}
-                    disabled={loading || !transferTo.trim() || !transferAmt || parseFloat(transferAmt) <= 0}
-                    className="btn-launch w-full py-3 flex items-center justify-center gap-2 disabled:opacity-40"
-                  >
-                    {loading ? <Loader2 size={14} className="animate-spin" /> : <ArrowLeftRight size={14} />}
-                    Transfer
-                  </button>
+                  <SwipeToConfirm
+                    label="SWIPE TO TRANSFER"
+                    variant="cyan"
+                    onConfirm={handleTransfer}
+                    onError={(e) => setMsg({ text: e.message, ok: false })}
+                    disabled={!transferTo.trim() || !transferAmt || parseFloat(transferAmt) <= 0}
+                  />
 
                   <p className="text-white/20 text-[10px] text-center">
                     Instant internal transfer — no gas, no blockchain tx.
