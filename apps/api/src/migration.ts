@@ -39,8 +39,6 @@ const DLMM_CLUSTER = (config.rpcUrl.includes("mainnet") ? "mainnet-beta" : "devn
 
 // ── IDL discriminator helper ──────────────────────────────────────────────────
 
-import TOKEN_LAUNCH_IDL from "./idl/token_launch.json";
-
 function loadIdlDiscriminator(instructionName: string): Buffer {
   const idl = TOKEN_LAUNCH_IDL as { instructions: Array<{ name: string; discriminator: number[] }> };
   const ix = idl.instructions.find((i) => i.name === instructionName);
