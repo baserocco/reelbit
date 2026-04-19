@@ -26,7 +26,7 @@ export function getProvider(wallet: AnchorWallet): AnchorProvider {
 let _tokenLaunchIdl: unknown = null;
 async function getTokenLaunchIdl() {
   if (!_tokenLaunchIdl) {
-    _tokenLaunchIdl = (await import("../../../target/idl/token_launch.json")).default;
+    _tokenLaunchIdl = (await import("./idl/token_launch.json")).default;
   }
   return _tokenLaunchIdl;
 }
