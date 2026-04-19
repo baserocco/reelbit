@@ -23,6 +23,8 @@ import {
 } from "./tradingApi";
 import { startDistributionCron, FEE_SPLIT } from "./distributionCron";
 import { startLpHarvestCron } from "./lpHarvestCron";
+import { startHolderDividendCron } from "./holderDividendCron";
+import { getAllDividends, getDividend } from "./dividendStore";
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -489,6 +491,18 @@ app.post("/tokens/:mint/sell", async (req: Request, res: Response) => {
   res.json({ transaction, solOut: netSol.toString(), minSolOut: minSolOut.toString() });
 });
 
+// ── Dividend endpoints ────────────────────────────────────────────────────────
+
+app.get("/dividends", (_req: Request, res: Response) => {
+  res.json(getAllDividends());
+});
+
+app.get("/dividends/:mint", (req: Request, res: Response) => {
+  const entry = getDividend(req.params.mint);
+  if (!entry) return res.status(404).json({ error: "No dividend record for this mint" });
+  res.json({ mint: req.params.mint, ...entry });
+});
+
 // ── Error handler ─────────────────────────────────────────────────────────────
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
@@ -500,4 +514,5 @@ app.listen(config.port, () => {
   console.log(`[api] ReelBit API running on port ${config.port}`);
   startDistributionCron(connection);
   startLpHarvestCron(connection);
+  startHolderDividendCron(connection);
 });

@@ -2,14 +2,16 @@
  * LP Harvest Cron — runs every 24 hours.
  *
  * For each graduated token with a live Meteora DLMM pool, claims accrued LP
- * fees from the migration authority's position and distributes them with the
- * same 5-way split used by the pre-bond fee vault:
+ * fees from the migration authority's position and distributes them via a
+ * 6-way split:
  *
- *   Creator   25%  — paid to the original token creator
- *   Platform  25%  — platform treasury (from PlatformConfig)
- *   Jackpot   30%  — per-token jackpot_vault PDA (feeds the slot machine display)
- *   Legal     10%  — legal/compliance wallet
- *   Licensing 10%  — licensing wallet
+ *   Creator        25%  — paid to the original token creator
+ *   Platform       20%  — platform treasury (from PlatformConfig)
+ *   Jackpot        25%  — per-token jackpot_vault PDA (feeds slot machine display)
+ *   Legal          10%  — legal/compliance wallet
+ *   Licensing      10%  — licensing wallet
+ *   HolderDividend 10%  — accumulated in dividendStore; distributed to top-100
+ *                         token holders by holderDividendCron every 24h
  *
  * On devnet this cron starts but finds no pools (graduation skips pool creation),
  * so it safely no-ops.
@@ -33,6 +35,7 @@ import DLMM from "@meteora-ag/dlmm";
 import fs from "fs";
 import { config } from "./config";
 import { getGraduatedWithPool } from "./themeStore";
+import { addDividend } from "./dividendStore";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -43,13 +46,14 @@ const DLMM_CLUSTER = (config.rpcUrl.includes("mainnet") ? "mainnet-beta" : "devn
   | "mainnet-beta"
   | "devnet";
 
-// 5-way LP fee split (basis points, must sum to 10_000)
+// 6-way LP fee split (basis points, must sum to 10_000)
 const LP_SPLIT = {
-  creator:  2_500,
-  platform: 2_500,
-  jackpot:  3_000,
-  legal:    1_000,
-  license:  1_000,
+  creator:         2_500,
+  platform:        2_000,
+  jackpot:         2_500,
+  legal:           1_000,
+  license:         1_000,
+  holderDividend:  1_000, // stays in authority wallet, forwarded by holderDividendCron
 } as const;
 
 // ── PDA helpers ───────────────────────────────────────────────────────────────
@@ -181,30 +185,37 @@ async function harvestPool(
   }
 
   const share = (bps: number) => Math.floor((distributable * bps) / 10_000);
-  const creatorShare  = share(LP_SPLIT.creator);
-  const platformShare = share(LP_SPLIT.platform);
-  const jackpotShare  = share(LP_SPLIT.jackpot);
-  const legalShare    = share(LP_SPLIT.legal);
-  const licenseShare  = share(LP_SPLIT.license);
+  const creatorShare       = share(LP_SPLIT.creator);
+  const platformShare      = share(LP_SPLIT.platform);
+  const jackpotShare       = share(LP_SPLIT.jackpot);
+  const legalShare         = share(LP_SPLIT.legal);
+  const licenseShare       = share(LP_SPLIT.license);
+  const holderDivShare     = share(LP_SPLIT.holderDividend);
 
-  const jackpotVault  = jackpotVaultPda(mint);
+  const jackpotVault = jackpotVaultPda(mint);
 
+  // Transfer 5 on-chain shares; holderDivShare stays in authority wallet (earmarked in store)
   const distTx = new Transaction();
-  if (creatorShare > 0)  distTx.add(SystemProgram.transfer({ fromPubkey: authority.publicKey, toPubkey: creator,           lamports: creatorShare }));
-  if (platformShare > 0) distTx.add(SystemProgram.transfer({ fromPubkey: authority.publicKey, toPubkey: wallets.platform,  lamports: platformShare }));
-  if (jackpotShare > 0)  distTx.add(SystemProgram.transfer({ fromPubkey: authority.publicKey, toPubkey: jackpotVault,      lamports: jackpotShare }));
-  if (legalShare > 0)    distTx.add(SystemProgram.transfer({ fromPubkey: authority.publicKey, toPubkey: wallets.legal,     lamports: legalShare }));
-  if (licenseShare > 0)  distTx.add(SystemProgram.transfer({ fromPubkey: authority.publicKey, toPubkey: wallets.license,   lamports: licenseShare }));
+  if (creatorShare > 0)   distTx.add(SystemProgram.transfer({ fromPubkey: authority.publicKey, toPubkey: creator,          lamports: creatorShare }));
+  if (platformShare > 0)  distTx.add(SystemProgram.transfer({ fromPubkey: authority.publicKey, toPubkey: wallets.platform, lamports: platformShare }));
+  if (jackpotShare > 0)   distTx.add(SystemProgram.transfer({ fromPubkey: authority.publicKey, toPubkey: jackpotVault,     lamports: jackpotShare }));
+  if (legalShare > 0)     distTx.add(SystemProgram.transfer({ fromPubkey: authority.publicKey, toPubkey: wallets.legal,    lamports: legalShare }));
+  if (licenseShare > 0)   distTx.add(SystemProgram.transfer({ fromPubkey: authority.publicKey, toPubkey: wallets.license,  lamports: licenseShare }));
 
   if (distTx.instructions.length > 0) {
     await sendAndConfirmTransaction(connection, distTx, [authority], { commitment: "confirmed" });
     totalSolHarvested = distributable;
   }
 
+  // Earmark holder dividend in store — holderDividendCron will distribute it
+  if (holderDivShare > 0) {
+    addDividend(mintStr, holderDivShare);
+  }
+
   const fmtSol = (n: number) => (n / LAMPORTS_PER_SOL).toFixed(6);
   console.log(
     `[lp-harvest] ✅ ${mintStr.slice(0, 8)}… — distributed ${fmtSol(totalSolHarvested)} SOL ` +
-    `(creator ${fmtSol(creatorShare)} / platform ${fmtSol(platformShare)} / jackpot ${fmtSol(jackpotShare)})`,
+    `(creator ${fmtSol(creatorShare)} / platform ${fmtSol(platformShare)} / jackpot ${fmtSol(jackpotShare)} / holders earmarked ${fmtSol(holderDivShare)})`,
   );
 }
 
