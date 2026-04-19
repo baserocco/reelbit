@@ -210,6 +210,15 @@ app.post("/themes/register", (req: Request, res: Response) => {
   res.status(201).json(theme);
 });
 
+// ── Fee constants ─────────────────────────────────────────────────────────────
+// All fees are borne by the user; the platform never absorbs swap or gas costs.
+
+const DEPOSIT_FEE_BPS      = 30;                // 0.30% — covers Jupiter gas + Solana tx fee
+const WITHDRAWAL_FEE_USDC  = 100_000;           // $0.10 flat — covers house SOL send tx fee
+const TRANSFER_FEE_BPS     = 100;               // 1.00% platform revenue on every transfer
+
+const PLATFORM_REVENUE_KEY = "PLATFORM_REVENUE"; // internal balance store key for platform fees
+
 // ── Balance endpoints ─────────────────────────────────────────────────────────
 // All internal balances are in USDC micro-units (1 USDC = 1_000_000).
 
@@ -244,15 +253,23 @@ app.post("/deposit/confirm", async (req: Request, res: Response) => {
     const { lamports } = await verifyDepositTx(connection, txSignature);
     markDepositSeen(txSignature);
 
-    // Swap the received SOL to USDC
-    const usdcReceived = await swapSolToUsdc(connection, lamports);
-    const entry        = credit(wallet, usdcReceived);
+    // Swap the received SOL to USDC (Jupiter routing fee already embedded in outAmount)
+    const usdcSwapped  = await swapSolToUsdc(connection, lamports);
+
+    // Deduct deposit fee (covers Jupiter gas reimbursement + Solana tx cost)
+    const depositFee   = Math.floor(usdcSwapped * DEPOSIT_FEE_BPS / 10_000);
+    const usdcCredited = usdcSwapped - depositFee;
+
+    // Platform collects the fee
+    credit(PLATFORM_REVENUE_KEY, depositFee);
+    const entry        = credit(wallet, usdcCredited);
 
     // Welcome bonus — one-time, first deposit only
-    const bonusEntry = applyWelcomeBonus(wallet, usdcReceived);
+    const bonusEntry = applyWelcomeBonus(wallet, usdcCredited);
 
     res.json({
-      deposited:    usdcReceived,
+      deposited:    usdcCredited,
+      depositFee,
       balance:      bonusEntry.playable,
       bonus:        bonusEntry.bonus,
       bonusClaimed: bonusEntry.welcomeBonusClaimed && bonusEntry.bonus > 0,
@@ -278,10 +295,14 @@ app.post("/withdraw", async (req: Request, res: Response) => {
   }
   const to = destination ?? wallet;
   try {
-    const entry       = debit(wallet, usdcUnits);
-    const lamports    = await usdcToLamports(connection, usdcUnits);
-    const txSignature = await sendSol(connection, to, lamports);
-    res.json({ txSignature, balance: entry.playable, withdrawn: usdcUnits });
+    // Deduct flat withdrawal fee before converting — user pays the house gas cost
+    const totalDebit     = usdcUnits + WITHDRAWAL_FEE_USDC;
+    const entry          = debit(wallet, totalDebit);
+    credit(PLATFORM_REVENUE_KEY, WITHDRAWAL_FEE_USDC);
+
+    const lamports       = await usdcToLamports(connection, usdcUnits);
+    const txSignature    = await sendSol(connection, to, lamports);
+    res.json({ txSignature, balance: entry.playable, withdrawn: usdcUnits, withdrawalFee: WITHDRAWAL_FEE_USDC });
   } catch (err) {
     res.status(400).json({ error: (err as Error).message });
   }
@@ -301,8 +322,21 @@ app.post("/transfer", (req: Request, res: Response) => {
   if (!recipient) return res.status(404).json({ error: `User #${toUserId.replace(/^#/, "")} not found` });
   if (recipient.wallet === from) return res.status(400).json({ error: "Cannot transfer to yourself" });
   try {
-    transfer(from, recipient.wallet, usdcUnits);
-    res.json({ balance: getPlayable(from), recipient: { userId: recipient.userId, username: recipient.username } });
+    // 1% platform tax deducted from sender before the transfer
+    const platformCut  = Math.floor(usdcUnits * TRANSFER_FEE_BPS / 10_000);
+    const netTransfer  = usdcUnits - platformCut;
+
+    // Debit full amount from sender, credit net to recipient and fee to platform
+    debit(from, usdcUnits);
+    credit(recipient.wallet, netTransfer);
+    credit(PLATFORM_REVENUE_KEY, platformCut);
+
+    res.json({
+      balance:     getPlayable(from),
+      transferred: netTransfer,
+      transferFee: platformCut,
+      recipient:   { userId: recipient.userId, username: recipient.username },
+    });
   } catch (err) {
     res.status(400).json({ error: (err as Error).message });
   }

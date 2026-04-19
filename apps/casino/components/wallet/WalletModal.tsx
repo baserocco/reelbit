@@ -149,9 +149,9 @@ export function WalletModal({ open, onClose, walletAddress, onBalanceChange }: P
     if (!effectiveWithdrawUsd || effectiveWithdrawUsd <= 0) throw new Error("Enter a withdrawal amount");
     const usdcUnits = usdToUsdc(effectiveWithdrawUsd);
     const dest      = withdrawDest.trim() || walletAddress;
-    const { txSignature } = await requestWithdraw(walletAddress, usdcUnits, dest);
+    const { txSignature, withdrawalFee } = await requestWithdraw(walletAddress, usdcUnits, dest);
     await refreshBalance();
-    setMsg({ text: `Withdrew ${formatUsdc(usdcUnits)}. Tx: ${txSignature.slice(0, 16)}…`, ok: true });
+    setMsg({ text: `Withdrew ${formatUsdc(usdcUnits)} (fee: ${formatUsdc(withdrawalFee ?? 0)}). Tx: ${txSignature.slice(0, 16)}…`, ok: true });
     setWithdrawUsd(null);
     setCustomWithdrawUsd("");
     setWithdrawDest("");
@@ -161,9 +161,9 @@ export function WalletModal({ open, onClose, walletAddress, onBalanceChange }: P
     if (!effectiveTransferUsd || effectiveTransferUsd <= 0) throw new Error("Enter a transfer amount");
     if (!transferTo.trim()) throw new Error("Enter a recipient User ID");
     const usdcUnits = usdToUsdc(effectiveTransferUsd);
-    const { balance, recipient } = await requestTransfer(walletAddress, transferTo.trim(), usdcUnits);
+    const { recipient, transferFee, transferred } = await requestTransfer(walletAddress, transferTo.trim(), usdcUnits);
     await refreshBalance();
-    setMsg({ text: `Sent ${formatUsdc(usdcUnits)} to ${recipient.username} (#${recipient.userId})`, ok: true });
+    setMsg({ text: `Sent ${formatUsdc(transferred)} to ${recipient.username} (1% fee: ${formatUsdc(transferFee ?? 0)})`, ok: true });
     setTransferUsd(null);
     setCustomTransferUsd("");
     setTransferTo("");
@@ -360,18 +360,16 @@ export function WalletModal({ open, onClose, walletAddress, onBalanceChange }: P
                   {effectiveDepositUsd > 0 && (
                     <div className="rounded-xl bg-white/[0.02] border border-white/5 p-3 text-xs space-y-1 text-white/40">
                       <div className="flex justify-between">
-                        <span>You deposit</span>
-                        <span className="text-white/70">${effectiveDepositUsd.toFixed(2)} USDC</span>
-                      </div>
-                      <div className="flex justify-between">
                         <span>You send (SOL)</span>
-                        <span className="text-white/70">
-                          {(effectiveDepositUsd / solPrice).toFixed(4)} SOL
-                        </span>
+                        <span className="text-white/70">{(effectiveDepositUsd / solPrice).toFixed(4)} SOL</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>1 SOL ≈</span>
-                        <span>${solPrice.toFixed(2)}</span>
+                        <span>Platform fee (0.3%)</span>
+                        <span className="text-red-400/70">−${(effectiveDepositUsd * 0.003).toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-white/5 pt-1 mt-1">
+                        <span className="text-white/60">You receive</span>
+                        <span className="text-green-400/80 font-bold">${(effectiveDepositUsd * 0.997).toFixed(2)} USDC</span>
                       </div>
                     </div>
                   )}

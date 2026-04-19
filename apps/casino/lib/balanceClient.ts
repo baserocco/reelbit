@@ -51,7 +51,7 @@ export async function requestWithdraw(
   wallet: string,
   usdcUnits: number,
   destination?: string,
-): Promise<{ txSignature: string; balance: number }> {
+): Promise<{ txSignature: string; balance: number; withdrawalFee: number }> {
   const res = await fetch(`${API}/withdraw`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -66,7 +66,7 @@ export async function requestTransfer(
   from: string,
   toUserId: string,
   usdcUnits: number,
-): Promise<{ balance: number; recipient: { userId: string; username: string } }> {
+): Promise<{ balance: number; transferred: number; transferFee: number; recipient: { userId: string; username: string } }> {
   const res = await fetch(`${API}/transfer`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
