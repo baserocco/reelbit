@@ -2,42 +2,57 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Wallet, LogOut, Zap, User } from "lucide-react";
+import { Wallet, LogOut, Zap, User, Gamepad2 } from "lucide-react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { useRouter } from "next/navigation";
 import { WalletModal } from "@/components/wallet/WalletModal";
 import { ProfileModal } from "@/components/profile/ProfileModal";
-import { fetchBalance } from "@/lib/balanceClient";
+import { fetchBalance, formatUsdc } from "@/lib/balanceClient";
 import { fetchProfile, type UserProfile } from "@/lib/profileClient";
 import { shortenAddress } from "@/lib/utils";
+import { getDemoSession, exitDemo, type DemoSession } from "@/lib/demoSession";
 
 export function Navbar() {
+  const router = useRouter();
   const { authenticated, login, logout } = usePrivy();
   const { wallets } = useWallets();
 
-  const [walletOpen,  setWalletOpen]  = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [balance,     setBalance]     = useState(0);
-  const [profile,     setProfile]     = useState<UserProfile | null>(null);
+  const [walletOpen,   setWalletOpen]   = useState(false);
+  const [profileOpen,  setProfileOpen]  = useState(false);
+  const [balance,      setBalance]      = useState(0);
+  const [profile,      setProfile]      = useState<UserProfile | null>(null);
+  const [demoSession,  setDemoSession]  = useState<DemoSession | null>(null);
 
   const wallet        = wallets[0];
   const walletAddress = wallet?.address ?? "";
 
-  // Poll balance every 10s
+  // Detect demo session (re-check on every render tick via interval)
   useEffect(() => {
-    if (!walletAddress) return;
-    fetchBalance(walletAddress).then(setBalance);
-    const id = setInterval(() => fetchBalance(walletAddress).then(setBalance), 10_000);
+    const sync = () => setDemoSession(getDemoSession());
+    sync();
+    const id = setInterval(sync, 1_000);
     return () => clearInterval(id);
-  }, [walletAddress]);
+  }, []);
+
+  // Poll real balance every 10s (non-demo only)
+  useEffect(() => {
+    if (!walletAddress || demoSession) return;
+    fetchBalance(walletAddress).then((e) => setBalance(e.playable));
+    const id = setInterval(() => fetchBalance(walletAddress).then((e) => setBalance(e.playable)), 10_000);
+    return () => clearInterval(id);
+  }, [walletAddress, demoSession]);
 
   // Load profile once wallet connects
   useEffect(() => {
-    if (!walletAddress) { setProfile(null); return; }
+    if (!walletAddress || demoSession) { setProfile(null); return; }
     fetchProfile(walletAddress).then(setProfile).catch(() => {});
-  }, [walletAddress]);
+  }, [walletAddress, demoSession]);
 
-  const solBalance = (balance / LAMPORTS_PER_SOL).toFixed(3);
+  function handleExitDemo() {
+    exitDemo();
+    setDemoSession(null);
+    router.push("/");
+  }
 
   return (
     <>
@@ -55,7 +70,39 @@ export function Navbar() {
               <Zap size={10} /> 96% RTP
             </div>
 
-            {authenticated && walletAddress ? (
+            {demoSession ? (
+              /* ── Demo mode ── */
+              <>
+                {/* Demo badge */}
+                <div className="flex items-center gap-1.5 bg-purple-500/10 border border-purple-500/20 rounded-xl px-3 py-1.5">
+                  <Gamepad2 size={11} className="text-purple-400" />
+                  <span className="font-orbitron text-[10px] font-bold text-purple-300">DEMO</span>
+                </div>
+
+                {/* Demo balance */}
+                <div className="flex items-center gap-2 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-1.5">
+                  <Wallet size={12} className="text-purple-400" />
+                  <span className="font-orbitron text-[11px] font-bold text-white">
+                    {formatUsdc(demoSession.balance)}
+                  </span>
+                </div>
+
+                {/* Username */}
+                <span className="hidden sm:block text-white/40 text-[11px] font-mono">
+                  {demoSession.username}
+                </span>
+
+                {/* Exit demo */}
+                <button
+                  onClick={handleExitDemo}
+                  className="text-white/15 hover:text-red-400/60 transition-colors"
+                  title="Exit demo"
+                >
+                  <LogOut size={13} />
+                </button>
+              </>
+            ) : authenticated && walletAddress ? (
+              /* ── Real wallet mode ── */
               <>
                 {/* Balance */}
                 <button
@@ -63,8 +110,7 @@ export function Navbar() {
                   className="flex items-center gap-2 bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 hover:border-purple-500/30 rounded-xl px-3 py-1.5 transition-all"
                 >
                   <Wallet size={12} className="text-purple-400" />
-                  <span className="font-orbitron text-[11px] font-bold text-white">{solBalance}</span>
-                  <span className="text-white/25 text-[10px]">SOL</span>
+                  <span className="font-orbitron text-[11px] font-bold text-white">{formatUsdc(balance)}</span>
                 </button>
 
                 {/* Profile avatar */}
@@ -103,9 +149,15 @@ export function Navbar() {
                 </button>
               </>
             ) : (
-              <button onClick={login} className="btn-launch py-2 px-4 text-[11px]">
-                Connect Wallet
-              </button>
+              /* ── Not connected ── */
+              <div className="flex items-center gap-2">
+                <Link href="/demo" className="text-[10px] font-orbitron text-purple-400/60 hover:text-purple-400 transition-colors px-2">
+                  Demo
+                </Link>
+                <button onClick={login} className="btn-launch py-2 px-4 text-[11px]">
+                  Connect Wallet
+                </button>
+              </div>
             )}
           </div>
         </div>

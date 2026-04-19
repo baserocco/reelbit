@@ -11,6 +11,7 @@ import { BetControls } from "@/components/slot/BetControls";
 import { WalletModal } from "@/components/wallet/WalletModal";
 import { createSession, spin, generateClientSeed, type Session } from "@/lib/gameClient";
 import { fetchBalance, formatUsdc, USDC_UNIT, type BalanceEntry } from "@/lib/balanceClient";
+import { getDemoSession, demoSpin, type DemoSession } from "@/lib/demoSession";
 import { shortenAddress } from "@/lib/utils";
 import type { SpinResult } from "@/components/slot/types";
 
@@ -58,6 +59,13 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
 
+  // Demo mode — bypasses Privy auth and game-server
+  const [demoSession, setDemoSession] = useState<DemoSession | null>(null);
+  useEffect(() => { setDemoSession(getDemoSession()); }, []);
+
+  const isDemo      = demoSession !== null;
+  const isLoggedIn  = isDemo || authenticated;
+
   const [theme, setTheme] = useState<SlotTheme | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [clientSeed, setClientSeed] = useState(generateClientSeed);
@@ -72,7 +80,7 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
   const [error,          setError]          = useState<string | null>(null);
   const [walletOpen,     setWalletOpen]     = useState(false);
   const [jackpotLamports, setJackpotLamports] = useState(0);
-  const [jackpotPrev,    setJackpotPrev]    = useState(0); // detect grows for animation
+  const [jackpotPrev,    setJackpotPrev]    = useState(0);
 
   const wallet = wallets[0];
   const walletAddress = wallet?.address ?? "";
@@ -85,21 +93,38 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
       .catch(() => {});
   }, [mint]);
 
-  // Fetch internal balance
+  // Sync demo balance into balance entry shape
+  useEffect(() => {
+    if (!isDemo) return;
+    const sync = () => {
+      const s = getDemoSession();
+      if (s) {
+        setDemoSession(s);
+        setBalance({ playable: s.balance, bonus: 0, wageringRequired: 0, wageringCompleted: 0, welcomeBonusClaimed: true });
+      }
+    };
+    sync();
+    const id = setInterval(sync, 500);
+    return () => clearInterval(id);
+  }, [isDemo]);
+
+  // Fetch real balance (non-demo only)
   const refreshBalance = useCallback(async () => {
-    if (!walletAddress) return;
+    if (!walletAddress || isDemo) return;
     const entry = await fetchBalance(walletAddress);
     setBalance(entry);
-  }, [walletAddress]);
+  }, [walletAddress, isDemo]);
 
   useEffect(() => {
+    if (isDemo) return;
     refreshBalance();
     const id = setInterval(refreshBalance, 8_000);
     return () => clearInterval(id);
-  }, [refreshBalance]);
+  }, [refreshBalance, isDemo]);
 
-  // Fetch live jackpot vault balance from on-chain PDA
+  // Fetch live jackpot vault balance (skipped in demo)
   useEffect(() => {
+    if (isDemo) return;
     let cancelled = false;
     async function poll() {
       const lamports = await fetchJackpotLamports(mint);
@@ -113,45 +138,55 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
     poll();
     const id = setInterval(poll, 15_000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [mint]);
+  }, [mint, isDemo]);
 
-  // Create game session when wallet connects
+  // Create game-server session (non-demo only)
   useEffect(() => {
-    if (!authenticated || !walletAddress || session) return;
+    if (isDemo || !authenticated || !walletAddress || session) return;
     createSession(walletAddress, theme?.slotModel ?? "Classic3Reel", mint)
       .then(setSession)
       .catch((e) => setError(`Session error: ${e.message}`));
-  }, [authenticated, walletAddress, session, theme]);
+  }, [isDemo, authenticated, walletAddress, session, theme, mint]);
 
   const handleSpin = useCallback(async () => {
-    if (!session || isSpinning) return;
+    if (isSpinning) return;
+    if (!isDemo && !session) return;
     setError(null);
     setIsSpinning(true);
 
     try {
-      const isFree       = freeSpinsLeft > 0;
+      const isFree = freeSpinsLeft > 0;
       const effectiveBet = isFree ? 0 : betUsdc;
-      const result       = await spin(session.sessionId, clientSeed, effectiveBet || DEFAULT_BET_USDC);
+
+      let result: SpinResult;
+
+      if (isDemo) {
+        // Client-side demo spin — no server calls, balance updated in localStorage
+        const demoBet = effectiveBet || DEFAULT_BET_USDC;
+        if (!isFree && (getDemoSession()?.balance ?? 0) < demoBet) {
+          throw new Error("Insufficient demo balance");
+        }
+        result = demoSpin(isFree ? 0 : demoBet, theme?.slotModel ?? "Classic3Reel");
+      } else {
+        result = await spin(session!.sessionId, clientSeed, effectiveBet || DEFAULT_BET_USDC);
+        setClientSeed(generateClientSeed());
+        setTimeout(refreshBalance, 500);
+      }
 
       setSpinResult(result);
-      setClientSeed(generateClientSeed());
-
       if (isFree) setFreeSpinsLeft((p) => p - 1);
       if (result.freeSpinsAwarded > 0) setFreeSpinsLeft((p) => p + result.freeSpinsAwarded);
-
       setTotalWagered((p) => p + (isFree ? 0 : betUsdc));
       setTotalWon((p) => p + result.totalPayout);
       setRecentSpins((prev) => [{ result, ts: Date.now() }, ...prev].slice(0, 20));
-
-      setTimeout(refreshBalance, 500);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Spin failed";
       setError(msg);
       setIsSpinning(false);
-      if (msg.toLowerCase().includes("insufficient")) setWalletOpen(true);
+      if (!isDemo && msg.toLowerCase().includes("insufficient")) setWalletOpen(true);
       throw e;
     }
-  }, [session, isSpinning, freeSpinsLeft, betUsdc, clientSeed, refreshBalance]);
+  }, [isSpinning, isDemo, session, freeSpinsLeft, betUsdc, clientSeed, refreshBalance, theme]);
 
   function handleSpinComplete() {
     setIsSpinning(false);
@@ -159,14 +194,14 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.code === "Space" && !isSpinning && authenticated) {
+      if (e.code === "Space" && !isSpinning && isLoggedIn) {
         e.preventDefault();
         handleSpin();
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleSpin, isSpinning, authenticated]);
+  }, [handleSpin, isSpinning, isLoggedIn]);
 
   const sessionRtp = totalWagered > 0 ? ((totalWon / totalWagered) * 100).toFixed(1) : "—";
   const slotName = theme?.tokenName ?? mint.slice(0, 8);
@@ -188,16 +223,18 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
             <div className="flex items-center gap-1 text-green-400/70">
               <Shield size={11} /> 96% RTP
             </div>
-            {authenticated && (
+            {isLoggedIn && (
               <button
-                onClick={() => setWalletOpen(true)}
-                className="flex items-center gap-1.5 text-white/50 hover:text-white transition-colors"
+                onClick={() => !isDemo && setWalletOpen(true)}
+                className={`flex items-center gap-1.5 text-white/50 transition-colors ${!isDemo ? "hover:text-white" : "cursor-default"}`}
               >
                 <Wallet size={11} />
                 {balance ? formatUsdc(balance.playable) : "$0.00"}
               </button>
             )}
-            {authenticated ? (
+            {isDemo ? (
+              <span className="text-purple-300/60 text-[10px] font-orbitron font-bold">DEMO</span>
+            ) : authenticated ? (
               <span className="text-white/30 font-mono">{shortenAddress(walletAddress)}</span>
             ) : (
               <button onClick={login} className="bg-purple-600 hover:bg-purple-500 px-3 py-1 rounded-lg transition-colors">
@@ -208,8 +245,8 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
         </div>
 
         <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
-          {/* Jackpot banner */}
-          <motion.div
+          {/* Jackpot banner — hidden in demo mode */}
+          {!isDemo && <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             className="relative overflow-hidden rounded-2xl border border-gold/20 bg-gradient-to-r from-gold/5 via-yellow-500/8 to-gold/5 px-6 py-4"
@@ -257,7 +294,7 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
                 </motion.div>
               )}
             </div>
-          </motion.div>
+          </motion.div>}
 
           {/* Slot machine */}
           <div className="flex flex-col items-center gap-6">
@@ -271,7 +308,7 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
             {error && (
               <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 flex items-center gap-2">
                 {error}
-                {error.toLowerCase().includes("insufficient") && (
+                {!isDemo && error.toLowerCase().includes("insufficient") && (
                   <button
                     onClick={() => setWalletOpen(true)}
                     className="ml-2 underline text-purple-400 text-xs"
@@ -282,7 +319,7 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
               </div>
             )}
 
-            {authenticated ? (
+            {isLoggedIn ? (
               <BetControls
                 betUsdc={betUsdc}
                 onBetChange={setBetUsdc}
@@ -306,7 +343,7 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
           </div>
 
           {/* Session stats */}
-          {authenticated && recentSpins.length > 0 && (
+          {isLoggedIn && recentSpins.length > 0 && (
             <div className="grid grid-cols-3 gap-4">
               {[
                 { label: "Session RTP", value: `${sessionRtp}%` },
@@ -342,8 +379,13 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
             </div>
           )}
 
-          {/* Provably fair */}
-          {session && (
+          {/* Provably fair / demo notice */}
+          {isDemo ? (
+            <div className="card-panel p-4 text-xs text-white/25 text-center font-rajdhani space-y-1">
+              <p className="font-orbitron text-[10px] font-bold text-purple-400/40 tracking-wider">DEMO MODE</p>
+              <p>Spins are simulated client-side. Balance resets when you exit. No real money involved.</p>
+            </div>
+          ) : session && (
             <div className="card-panel p-5 space-y-2 text-xs text-white/30">
               <div className="text-white/50 font-orbitron text-[11px] font-bold flex items-center gap-1.5 tracking-wider">
                 <Shield size={12} /> PROVABLY FAIR

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Search, Flame, Star, Trophy, Loader2, Zap, TrendingUp, User, Gift } from "lucide-react";
+import { Search, Flame, Star, Trophy, Loader2, Zap, TrendingUp, User } from "lucide-react";
 import Link from "next/link";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { cn } from "@/lib/utils";
@@ -181,7 +181,7 @@ export default function CasinoLobby() {
               href="/demo"
               className="flex items-center gap-1.5 text-[10px] font-orbitron font-bold text-purple-400/60 hover:text-purple-400 transition-colors px-3 py-3"
             >
-              <Gift size={11} /> Beta Access
+              <Zap size={11} /> Try Demo
             </Link>
           </div>
         </div>
