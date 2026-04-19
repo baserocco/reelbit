@@ -130,9 +130,9 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
     setIsSpinning(true);
 
     try {
-      const isFree = freeSpinsLeft > 0;
+      const isFree       = freeSpinsLeft > 0;
       const effectiveBet = isFree ? 0 : betLamports;
-      const result = await spin(session.sessionId, clientSeed, effectiveBet || DEFAULT_BET);
+      const result       = await spin(session.sessionId, clientSeed, effectiveBet || DEFAULT_BET);
 
       setSpinResult(result);
       setClientSeed(generateClientSeed());
@@ -144,17 +144,14 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
       setTotalWon((p) => p + result.totalPayout);
       setRecentSpins((prev) => [{ result, ts: Date.now() }, ...prev].slice(0, 20));
 
-      // Refresh balance after spin (game server updated it server-side)
       setTimeout(refreshBalance, 500);
+      // isSpinning stays true until SlotMachine animation calls onSpinComplete
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Spin failed";
       setError(msg);
-      // If insufficient balance, prompt wallet deposit
-      if (msg.toLowerCase().includes("insufficient")) {
-        setWalletOpen(true);
-      }
-    } finally {
-      // isSpinning cleared by onSpinComplete
+      setIsSpinning(false); // animation never starts on error — clear immediately
+      if (msg.toLowerCase().includes("insufficient")) setWalletOpen(true);
+      throw e; // re-throw so SwipeToConfirm shows its error state
     }
   }, [session, isSpinning, freeSpinsLeft, betLamports, clientSeed, refreshBalance]);
 
@@ -327,7 +324,7 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
               </motion.button>
             )}
 
-            <p className="text-white/15 text-xs">Press Space to spin</p>
+            <p className="text-white/15 text-xs">Swipe to spin · Space key also works</p>
           </div>
 
           {/* Session stats */}
