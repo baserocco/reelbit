@@ -67,7 +67,7 @@ export default function SlotPage({ params }: { params: { mint: string } }) {
 
   const [slot,     setSlot]     = useState<SlotToken | null>(null);
   const [progress, setProgress] = useState(0);
-  const [trades,   setTrades]   = useState<TradeEvent[]>([]);
+  const [trades,   setTrades]   = useState<TradeEvent[]>([]); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState<string | null>(null);
   const [tradeKey, setTradeKey] = useState(0); // bumped after buy/sell to refresh BuySellPanel
@@ -157,6 +157,7 @@ export default function SlotPage({ params }: { params: { mint: string } }) {
               <div className="flex items-start gap-5">
                 <div className="relative w-[72px] h-[72px] shrink-0">
                   {slot.imageUri ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={slot.imageUri} alt={slot.name}
                       className="w-full h-full rounded-2xl object-cover border border-white/8" />
                   ) : (
