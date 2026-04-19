@@ -324,7 +324,7 @@ export default function CasinoSlotPage({ params }: { params: { mint: string } })
               </motion.button>
             )}
 
-            <p className="text-white/15 text-xs">Swipe to spin · Space key also works</p>
+            <p className="text-white/15 text-xs">Press Space to spin</p>
           </div>
 
           {/* Session stats */}
